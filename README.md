@@ -86,7 +86,7 @@
 
 2\. 找到 MiIsland 插件设置。
 
-3\. 通过\[token\_extractor.exe](https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor)提取Xiaomi Cloud Tokens Extractor。
+3\. 通过\[token\_extractor.exe](https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor) 提取Xiaomi Cloud Tokens Extractor。
 
 4\. 授权成功后，插件会自动同步你的设备。
 
