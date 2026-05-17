@@ -1,4 +1,5 @@
 MiIsland - 米家智能设备控制插件
+<img width="2048" height="2048" alt="MiIsland" src="https://github.com/user-attachments/assets/da343ef5-a1be-47c7-b4b2-9bee5a6f2c49" />
 
 
 
