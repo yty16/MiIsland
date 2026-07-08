@@ -77,6 +77,24 @@ public partial class SettingsControl : SettingsPageBase
         // === 刷新间隔 ===
         rootPanel.Children.Add(BuildRefreshSection());
 
+        // === 合规提示（可见免责声明） ===
+        rootPanel.Children.Add(new Border
+        {
+            BorderBrush = Brush.Parse("#FFE0B2"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Background = Brush.Parse("#FFF8E1"),
+            Padding = new Thickness(10),
+            Margin = new Thickness(0, 8, 0, 0),
+            Child = new TextBlock
+            {
+                Text = "⚠ 免责声明：本插件为非官方、仅供个人学习研究的第三方工具，使用即表示你已阅读并同意仓库内 DISCLAIMER.md 全部条款。请勿用于商业或分发。",
+                FontSize = 11,
+                Foreground = Brush.Parse("#8D6E63"),
+                TextWrapping = TextWrapping.Wrap
+            }
+        });
+
         scroll.Content = rootPanel;
         Content = scroll;
     }

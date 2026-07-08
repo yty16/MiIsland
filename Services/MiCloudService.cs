@@ -402,10 +402,10 @@ public class MiCloudService : IDisposable
                             return (false, "未获取到登录跳转地址", null);
 
                         // 暂存数据，待 step4 完成登录
-                        _pendingSsecurity = ssecurity;
-                        _pendingUserId = userId;
-                        _pendingCUserId = cUserId;
-                        _pendingLocation = location;
+                        _pendingSsecurity = ssecurity ?? "";
+                        _pendingUserId = userId ?? "";
+                        _pendingCUserId = cUserId ?? "";
+                        _pendingLocation = location ?? "";
 
                         return (true, "扫码成功，正在完成登录...", location);
                     }
