@@ -3,18 +3,12 @@ using System.Text.Json.Serialization;
 namespace MiIsland.Models;
 
 /// <summary>
-/// 小米账号登录凭证 (持久化)
+/// 登录标识 (仅用于 UI 展示，本插件不持久化任何账号凭证或密码)
 /// </summary>
 public class MiAccountInfo
 {
-    /// <summary>小米账号 (手机号/邮箱/Xiaomi ID)</summary>
+    /// <summary>登录方式标识 (例如 "[扫码登录]")；本插件不保存小米账号与密码</summary>
     public string Username { get; set; } = "";
-
-    /// <summary>账号密码</summary>
-    public string Password { get; set; } = "";
-
-    /// <summary>国家/地区代码 (默认 "cn" 中国大陆)</summary>
-    public string Country { get; set; } = "cn";
 }
 
 /// <summary>

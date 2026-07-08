@@ -11,7 +11,7 @@ namespace MiIsland.Services;
 
 /// <summary>
 /// 小米云 API 通信服务（非官方逆向实现，仅供个人学习研究）。
-/// 通过小米账号登录，使用云端 API 查询和控制米家设备。
+/// 仅通过小米官方提供的「扫码登录」流程授权，不收集、不存储任何账号密码。
 /// 详见仓库根目录 DISCLAIMER.md。
 ///
 /// 参考（社区公开逆向研究，仅用于学习）:
@@ -32,9 +32,7 @@ public class MiCloudService : IDisposable
 
     private const string UserAgent = "Android-7.1.1-1.0.0-ONEPLUS A3010-136-1234567890 APP/xiaomi.smarthome APPV/62830";
 
-    // API 端点 (中国大陆)
-    private const string LoginSignUrl = "https://account.xiaomi.com/pass/serviceLogin?sid=xiaomiio&_json=true";
-    private const string LoginAuthUrl = "https://account.xiaomi.com/pass/serviceLoginAuth2";
+    // API 端点
     private const string ApiBase = "https://api.io.mi.com/app";
 
     public MiCloudService()
@@ -60,126 +58,8 @@ public class MiCloudService : IDisposable
     public bool IsLoggedIn => _session?.IsValid == true;
     public string? CurrentUserId => _session?.UserId;
 
-    /// <summary>
-    /// 使用小米账号密码登录
-    /// </summary>
-    /// <returns>登录成功返回true; 需要验证码时返回false并提示</returns>
-    public async Task<(bool Success, string Message)> LoginAsync(string username, string password, string country = "cn")
-    {
-        try
-        {
-            // Step 1: 获取登录页面的 _sign
-            var signResp = await _client.GetStringAsync(LoginSignUrl);
-            var signData = ParseXiaomiJson(signResp);
-
-            if (!signData.TryGetProperty("_sign", out var sign))
-                return (false, "获取登录签名失败，请稍后重试");
-
-            if (signData.TryGetProperty("notificationUrl", out var notif))
-            {
-                var notifStr = notif.GetString();
-                if (!string.IsNullOrEmpty(notifStr))
-                    return (false, $"需要验证码验证，请先在手机上登录小米账号，再尝试 {notifStr}");
-            }
-
-            var qs = signData.TryGetProperty("qs", out var q) ? q.GetString() : "";
-            var callback = signData.TryGetProperty("callback", out var cb) ? cb.GetString() : "";
-
-            // Step 2: 提交登录凭据
-            var passwordHash = ComputeMd5Upper(password);
-            var loginBody = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["sid"] = "xiaomiio",
-                ["hash"] = passwordHash,
-                ["user"] = username,
-                ["_sign"] = sign.GetString()!,
-                ["_json"] = "true",
-                ["qs"] = qs ?? "",
-                ["callback"] = callback ?? "",
-                ["serviceParam"] = """{"checkSafePhone":false}"""
-            });
-
-            var authResp = await _client.PostAsync(LoginAuthUrl, loginBody);
-            var authBody = await authResp.Content.ReadAsStringAsync();
-            var authData = ParseXiaomiJson(authBody);
-
-            // 检查是否需要验证码
-            if (authData.TryGetProperty("notificationUrl", out var authNotify))
-            {
-                var aNotifStr = authNotify.GetString();
-                if (!string.IsNullOrEmpty(aNotifStr))
-                    return (false, $"账号需要安全验证，请先在手机小米商城App中登录一次");
-            }
-
-            var code = authData.TryGetProperty("code", out var c) ? c.GetInt32() : -1;
-            if (code != 0)
-            {
-                var msg = authData.TryGetProperty("desc", out var d) ? d.GetString() : "未知错误";
-                return (false, $"登录失败: {msg}");
-            }
-
-            var ssecurity = authData.GetProperty("ssecurity").GetString()!;
-            var userId = authData.GetProperty("userId").GetString()!;
-            var cUserId = authData.TryGetProperty("cUserId", out var cu) ? cu.GetString() ?? userId : userId;
-            var location = authData.GetProperty("location").GetString()!;
-
-            // Step 3: 获取 serviceToken (通过跟随location重定向)
-            var locationResp = await _client.GetAsync(location);
-            await locationResp.Content.ReadAsStringAsync(); // consume
-
-            // 从CookieContainer中提取 serviceToken（优先 api.io.mi.com / sts 域，兜底扫描所有）
-            var serviceToken = TryGetCookie("https://api.io.mi.com", "serviceToken")
-                ?? TryGetCookie("https://sts.api.io.mi.com", "serviceToken");
-
-            if (string.IsNullOrEmpty(serviceToken))
-            {
-                try
-                {
-                    foreach (System.Net.Cookie ck in _handler.CookieContainer.GetAllCookies())
-                    {
-                        if (ck.Name == "serviceToken" && !string.IsNullOrEmpty(ck.Value))
-                        {
-                            serviceToken = ck.Value;
-                            break;
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            var cookieUserId = TryGetCookie("https://api.io.mi.com", "userId")
-                ?? TryGetCookie("https://account.xiaomi.com", "userId")
-                ?? userId;
-
-            if (string.IsNullOrEmpty(serviceToken))
-                return (false, "获取服务令牌失败，请重试");
-
-            // 注入到设备接口所需域，确保请求一定带 cookie
-            InjectCookie("serviceToken", serviceToken);
-            if (!string.IsNullOrEmpty(cookieUserId))
-                InjectCookie("userId", cookieUserId);
-
-            _session = new MiSession
-            {
-                UserId = cookieUserId,
-                ServiceToken = serviceToken,
-                Ssecurity = ssecurity,
-                CUserId = cUserId,
-                ExpiresAt = DateTime.Now.AddDays(7) // token 一般有效期7天
-            };
-
-            System.Diagnostics.Debug.WriteLine($"[MiCloud] Login success: userId={cookieUserId}");
-            return (true, "登录成功");
-        }
-        catch (HttpRequestException ex)
-        {
-            return (false, $"网络错误: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return (false, $"登录异常: {ex.Message}");
-        }
-    }
+    // 注意：本项目仅支持「扫码登录」（小米官方授权流程），已移除账号密码登录，
+    // 因此本服务不处理、不存储任何账号或密码。
 
     /// <summary>
     /// 获取云端设备列表
@@ -842,12 +722,7 @@ public class MiCloudService : IDisposable
         return Convert.ToBase64String(hash);
     }
 
-    /// <summary>MD5大写 (小米登录用的hash格式)</summary>
-    private static string ComputeMd5Upper(string input)
-    {
-        var hash = MD5.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash); // 默认大写
-    }
+    // 备注：账号密码登录已移除，相关 MD5 逻辑一并删除，本插件不再处理任何密码。
 
     public void Dispose()
     {

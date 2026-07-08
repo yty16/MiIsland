@@ -19,10 +19,6 @@ public partial class SettingsControl : SettingsPageBase
     private readonly MiCloudService _cloudService = new();
 
     // UI 控件引用
-    private TextBox? _usernameBox;
-    private TextBox? _passwordBox;
-    private ComboBox? _countryCombo;
-    private Button? _loginButton;
     private Button? _qrButton;
     private Button? _logoutButton;
     private TextBlock? _loginStatusText;
@@ -109,89 +105,35 @@ public partial class SettingsControl : SettingsPageBase
 
         section.Children.Add(BuildSectionHeader("小米账号登录"));
 
-        // 地区选择
-        var countryRow = new Grid
+        // 说明：仅支持扫码登录，不保存任何密码
+        section.Children.Add(new TextBlock
         {
-            ColumnDefinitions = new ColumnDefinitions("80,*"),
+            Text = "本插件仅支持「扫码登录」（小米官方授权流程），不收集、不存储任何账号密码。",
+            FontSize = 11,
+            Foreground = Brush.Parse("#999999"),
+            TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 4)
-        };
-        countryRow.Children.Add(new TextBlock
-        {
-            Text = "地区",
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 13
         });
-        _countryCombo = new ComboBox
-        {
-            ItemsSource = new[] { "中国大陆 (cn)", "其他地区" },
-            SelectedIndex = 0
-        };
-        Grid.SetColumn(_countryCombo, 1);
-        countryRow.Children.Add(_countryCombo);
-        section.Children.Add(countryRow);
 
-        // 账号
-        var userRow = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("80,*"),
-            Margin = new Thickness(0, 0, 0, 4)
-        };
-        userRow.Children.Add(new TextBlock
-        {
-            Text = "小米账号",
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 13
-        });
-        _usernameBox = new TextBox
-        {
-            Watermark = "手机号/邮箱/Xiaomi ID",
-            Text = _settings.Account.Username
-        };
-        Grid.SetColumn(_usernameBox, 1);
-        userRow.Children.Add(_usernameBox);
-        section.Children.Add(userRow);
-
-        // 密码
-        var passRow = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("80,*"),
-            Margin = new Thickness(0, 0, 0, 4)
-        };
-        passRow.Children.Add(new TextBlock
-        {
-            Text = "密码",
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 13
-        });
-        _passwordBox = new TextBox
-        {
-            Watermark = "小米账号密码",
-            PasswordChar = '*',
-            Text = _settings.Account.Password
-        };
-        Grid.SetColumn(_passwordBox, 1);
-        passRow.Children.Add(_passwordBox);
-        section.Children.Add(passRow);
-
-        // 按钮行
+        // 按钮行：扫码登录 + 登出
         var buttonRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Margin = new Thickness(80, 4, 0, 0)
+            Margin = new Thickness(0, 4, 0, 0)
         };
 
-        _loginButton = new Button
+        _qrButton = new Button
         {
-            Content = "登  录",
-            Width = 80,
-            Background = Brush.Parse("#4CAF50"),
+            Content = "扫码登录",
+            Width = 100,
+            Background = Brush.Parse("#2196F3"),
             Foreground = Brushes.White,
             CornerRadius = new CornerRadius(4),
             FontWeight = FontWeight.SemiBold
         };
-        _loginButton.Click += OnLoginClick;
-        buttonRow.Children.Add(_loginButton);
+        _qrButton.Click += OnQrLoginClick;
+        buttonRow.Children.Add(_qrButton);
 
         _logoutButton = new Button
         {
@@ -206,36 +148,6 @@ public partial class SettingsControl : SettingsPageBase
 
         section.Children.Add(buttonRow);
 
-        // 说明文字
-        section.Children.Add(new TextBlock
-        {
-            Text = "登录后将自动获取您小米账号下的所有米家智能设备。\n密码仅保存在本地，不会上传到任何第三方。",
-            FontSize = 11,
-            Foreground = Brush.Parse("#999999"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(80, 4, 0, 0)
-        });
-
-        // 扫码登录按钮
-        var qrBtnRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Margin = new Thickness(80, 6, 0, 0)
-        };
-        _qrButton = new Button
-        {
-            Content = "扫码登录",
-            Width = 100,
-            Background = Brush.Parse("#2196F3"),
-            Foreground = Brushes.White,
-            CornerRadius = new CornerRadius(4),
-            FontWeight = FontWeight.SemiBold
-        };
-        _qrButton.Click += OnQrLoginClick;
-        qrBtnRow.Children.Add(_qrButton);
-        section.Children.Add(qrBtnRow);
-
         // 扫码登录面板（初始隐藏）
         _qrPanel = new Border
         {
@@ -244,7 +156,7 @@ public partial class SettingsControl : SettingsPageBase
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12),
-            Margin = new Thickness(80, 8, 0, 0),
+            Margin = new Thickness(0, 8, 0, 0),
             IsVisible = false
         };
         var qrStack = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
@@ -366,56 +278,7 @@ public partial class SettingsControl : SettingsPageBase
 
     // === 事件处理 ===
 
-    private async void OnLoginClick(object? sender, RoutedEventArgs e)
-    {
-        if (_loginButton == null) return;
-
-        var username = _usernameBox?.Text?.Trim() ?? "";
-        var password = _passwordBox?.Text?.Trim() ?? "";
-
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-        {
-            _loginStatusText!.Text = "⚠ 请输入小米账号和密码";
-            _loginStatusText.Foreground = Brush.Parse("#FF9800");
-            return;
-        }
-
-        _loginButton.IsEnabled = false;
-        _loginButton.Content = "登录中...";
-        _loginStatusText!.Text = "正在登录小米账号...";
-        _loginStatusText.Foreground = Brush.Parse("#2196F3");
-
-        try
-        {
-            var (success, message) = await _cloudService.LoginAsync(username, password);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (success)
-                {
-                    _settings.Account.Username = username;
-                    _settings.Account.Password = password;
-                    _settings.Save();
-
-                    _loginStatusText.Text = "✓ 登录成功";
-                    _loginStatusText.Foreground = Brush.Parse("#4CAF50");
-
-                    _ = RefreshDeviceListAsync();
-                }
-                else
-                {
-                    _loginStatusText.Text = $"✗ {message}";
-                    _loginStatusText.Foreground = Brush.Parse("#F44336");
-                }
-                UpdateLoginStatus();
-            });
-        }
-        finally
-        {
-            _loginButton.IsEnabled = true;
-            _loginButton.Content = "登  录";
-        }
-    }
+    // 账号密码登录已移除：本插件仅支持扫码登录，详见 DISCLAIMER.md。
 
     private void OnLogoutClick(object? sender, RoutedEventArgs e)
     {
@@ -426,9 +289,6 @@ public partial class SettingsControl : SettingsPageBase
         UpdateLoginStatus();
         _deviceCountText!.Text = "请先登录以获取设备列表";
         _deviceListControl!.ItemsSource = null;
-
-        if (_usernameBox != null) _usernameBox.Text = "";
-        if (_passwordBox != null) _passwordBox.Text = "";
     }
 
     // === 扫码登录 ===
@@ -616,11 +476,8 @@ public partial class SettingsControl : SettingsPageBase
     private void UpdateLoginStatus()
     {
         var loggedIn = _cloudService.IsLoggedIn;
-        if (_loginButton != null) _loginButton.IsVisible = !loggedIn;
         if (_logoutButton != null) _logoutButton.IsVisible = loggedIn;
-        if (_usernameBox != null) _usernameBox.IsEnabled = !loggedIn;
-        if (_passwordBox != null) _passwordBox.IsEnabled = !loggedIn;
-        if (_countryCombo != null) _countryCombo.IsEnabled = !loggedIn;
+        if (_qrButton != null) _qrButton.IsEnabled = !loggedIn;
     }
 
     private void OnPageUnloaded(object? sender, EventArgs e)

@@ -18,7 +18,7 @@ namespace MiIsland.Views;
 [ComponentInfo(
     "A1E4F8B2-6C3D-4E5F-9A1B-2C3D4E5F6A7B",
     "米家设备面板",
-    description: "云端控制米家智能设备，无需局域网和Token，小米账号登录即可"
+    description: "云端控制米家智能设备，仅需小米官方扫码登录即可授权"
 )]
 public class MiHomeComponent : ComponentBase
 {
@@ -223,15 +223,8 @@ public class MiHomeComponent : ComponentBase
 
     private async Task AutoLoginAndRefreshAsync()
     {
-        // 如果有已保存的账号，自动登录
-        if (!string.IsNullOrEmpty(_settings.Account.Username) &&
-            !string.IsNullOrEmpty(_settings.Account.Password))
-        {
-            await _cloudService.LoginAsync(
-                _settings.Account.Username,
-                _settings.Account.Password);
-        }
-
+        // 本插件仅支持扫码登录（授权保存在内存中，重启后失效），
+        // 因此启动时不自动登录；如已登录（会话未过期）则直接刷新设备。
         if (_cloudService.IsLoggedIn)
         {
             _refreshTimer?.Start();
