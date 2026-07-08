@@ -1,0 +1,21 @@
+# 构建产物
+bin/
+obj/
+publish/
+
+# 打包产物（由 publish/ 压缩生成，非源码）
+*.cipx
+
+# IDE / 编辑器
+.vs/
+.idea/
+*.user
+*.suo
+
+# 本地配置 / 凭据（绝不入库）
+*.settings.json
+AppData/
+
+# 操作系统
+Thumbs.db
+.DS_Store
