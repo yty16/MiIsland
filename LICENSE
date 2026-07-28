@@ -1,28 +1,34 @@
-MIT License
+# MiIsland 非商业软件许可协议（MiIsland Non-Commercial License）
 
-Copyright (c) 2026 yty16
+版权所有 © 2026 yty16。保留一切权利。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## 一、授予的权限
+在遵守本协议全部条款的前提下，作者授予你以下**非独占、不可转让、免费**的权利：
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. **使用**：为本人的个人学习、技术研究与非商业目的，下载、安装、运行本软件；
+2. **无偿分发**：以**不收取任何费用、不营利**的方式，向他人**原样**提供本软件的副本（含源代码与构建产物）。分发时**必须同时附带**本协议（LICENSE）、[免责声明](./DISCLAIMER.md) 与版权声明，且**不得修改**本协议与免责声明的内容；
+3. **个人修改**：为本人的非商业学习研究，对源代码进行修改并自用。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+## 二、禁止的事项
+你**不得**实施以下任何行为（无论是否借助本软件直接获利）：
 
----
+1. **商业使用**：将本软件用于任何商业、盈利、经营或规模化部署场景，或将其作为商业产品 / 服务的一部分提供；
+2. **售卖或收费**：出售、出租、转售、许可收费，或就本软件（含修改后的版本）向任何第三方收取任何费用；
+3. **商标与品牌混淆**：以本软件冒充小米官方产品，或使用小米商标、标识进行任何可能引人误解的展示或宣传；
+4. **规避义务**：利用本软件实施任何违反适用法律、法规或第三方（含小米）服务条款的行为，或将其用于侵犯他人合法权益的用途。
 
-注意：本 MIT 许可证仅涵盖本仓库中作者原创的代码与文档。
-它**不授予**使用者调用小米（Xiaomi）任何非公开接口、商标或数据的权利，
-也不豁免使用者遵守小米相关服务条款与适用法律的义务。
-详见 DISCLAIMER.md。
+## 三、权利保留
+1. 除本协议明示授予的权利外，作者保留本软件及全部相关知识产权（含著作权、商标权、商业秘密）的一切权利；
+2. 本协议**不授予**你使用小米（Xiaomi）任何非公开接口、协议、商标或数据的权利，亦**不豁免**你遵守第三方服务条款与适用法律的义务；
+3. 作者可随时基于合规或任何合理原因，要求你停止分发、下架本软件，你应在收到请求后及时配合。
+
+## 四、免责与责任限制（"现状"提供）
+1. 本软件按"**现状（AS IS）**"且"**现有可用（AS AVAILABLE）**"提供，不作任何明示或暗示的担保，包括但不限于适销性、特定用途适用性、非侵权性、安全性或可靠性；
+2. 在任何情况下，作者均不对因使用、无法使用或分发本软件所产生的任何直接、间接、附带或后果性损失负责；
+3. 分发者对其分发副本的后续使用后果不承担额外担保，但应确保分发时附带了完整的本协议与免责声明。
+
+## 五、终止
+若你违反本协议任何条款，本协议授予的许可自违反之日起自动终止，你应立即停止使用与分发本软件，并删除所有副本。
+
+## 六、适用法律
+本协议受**中华人民共和国法律**管辖；因本协议或本软件引起的争议，协商不成的，提交作者所在地有管辖权的人民法院诉讼解决。

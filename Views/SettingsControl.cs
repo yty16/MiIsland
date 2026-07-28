@@ -88,7 +88,7 @@ public partial class SettingsControl : SettingsPageBase
             Margin = new Thickness(0, 8, 0, 0),
             Child = new TextBlock
             {
-                Text = "⚠ 免责声明：本插件为非官方、仅供个人学习研究的第三方工具，使用即表示你已阅读并同意仓库内 DISCLAIMER.md 全部条款。请勿用于商业或分发。",
+                Text = "⚠ 免责声明：本插件为非官方、仅供个人学习研究的第三方工具，仅限非商业使用。使用即表示你已阅读并同意仓库内 DISCLAIMER.md 全部条款。禁止任何形式的商业使用或收费。",
                 FontSize = 11,
                 Foreground = Brush.Parse("#8D6E63"),
                 TextWrapping = TextWrapping.Wrap
