@@ -23,7 +23,7 @@ public partial class SettingsControl : SettingsPageBase
     private Button? _logoutButton;
     private TextBlock? _loginStatusText;
     private TextBlock? _deviceCountText;
-    private NumericUpDown? _refreshIntervalBox;
+    private TextBox? _refreshIntervalBox;
     private ItemsControl? _deviceListControl;
 
     // 扫码登录 UI
@@ -274,11 +274,10 @@ public partial class SettingsControl : SettingsPageBase
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 13
         });
-        _refreshIntervalBox = new NumericUpDown
+        _refreshIntervalBox = new TextBox
         {
-            Value = _settings.RefreshIntervalSeconds,
-            Minimum = 0,
-            Maximum = 300,
+            Text = _settings.RefreshIntervalSeconds.ToString(),
+            Watermark = "0-300",
             Width = 80
         };
         row.Children.Add(_refreshIntervalBox);
@@ -500,7 +499,11 @@ public partial class SettingsControl : SettingsPageBase
 
     private void OnPageUnloaded(object? sender, EventArgs e)
     {
-        _settings.RefreshIntervalSeconds = (int)(_refreshIntervalBox?.Value ?? 30);
+        if (_refreshIntervalBox != null &&
+            int.TryParse(_refreshIntervalBox.Text, out var value))
+        {
+            _settings.RefreshIntervalSeconds = Math.Clamp(value, 0, 300);
+        }
         _settings.Save();
         this.Unloaded -= OnPageUnloaded;
     }
