@@ -58,7 +58,7 @@ public class MiCloudService : IDisposable
     public bool IsLoggedIn => _session?.IsValid == true;
     public string? CurrentUserId => _session?.UserId;
 
-    // 注意：本项目仅支持「扫码登录」（小米官方授权流程），已移除账号密码登录，
+    // 注意：本项目仅支持「扫码登录」，已移除账号密码登录，
     // 因此本服务不处理、不存储任何账号或密码。
 
     /// <summary>

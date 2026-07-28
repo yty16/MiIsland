@@ -126,7 +126,7 @@ public partial class SettingsControl : SettingsPageBase
         // 说明：仅支持扫码登录，不保存任何密码
         section.Children.Add(new TextBlock
         {
-            Text = "本插件仅支持「扫码登录」（小米官方授权流程），不收集、不存储任何账号密码。",
+            Text = "本插件仅支持「扫码登录」，不收集、不存储任何账号密码。",
             FontSize = 11,
             Foreground = Brush.Parse("#999999"),
             TextWrapping = TextWrapping.Wrap,
