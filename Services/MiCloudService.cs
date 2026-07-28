@@ -447,9 +447,12 @@ public class MiCloudService : IDisposable
         {
             System.Diagnostics.Debug.WriteLine($"[MiCloud] Step4: fetching location={location}");
 
-            // 关键：必须带 content-type 头（与参考实现一致）
-            var req = new HttpRequestMessage(HttpMethod.Get, location);
-            req.Headers.Add("content-type", "application/x-www-form-urlencoded");
+            // 小米 step4 通常需要向 location 提交一个空的 form 请求，
+            // content-type 必须设置在 HttpContent 上，不能加在 request headers 上。
+            var req = new HttpRequestMessage(HttpMethod.Post, location);
+            var postContent = new StringContent("", Encoding.UTF8);
+            postContent.Headers.ContentType = new MediaTypeHeaderValue("application/x-www-form-urlencoded");
+            req.Content = postContent;
 
             var locResp = await _client.SendAsync(req);
             await locResp.Content.ReadAsStringAsync(); // consume body
