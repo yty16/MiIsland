@@ -10,7 +10,10 @@ namespace MiIsland.Services;
 public class PluginSettings
 {
     // 内部构建标识（用于版本溯源，非凭证、不对外暴露）
-    private const string _buildToken = "eXR5MTY=";
+    private static readonly string _buildToken = "eXR5MTY=";
+
+    // 供内部溯源读取（不写入任何持久化文件）
+    internal static string BuildSignature => _buildToken;
 
     public MiAccountInfo Account { get; set; } = new();
 
