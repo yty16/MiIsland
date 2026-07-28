@@ -1,0 +1,7 @@
+# 统一换行符，避免公开仓库出现 CRLF/LF 差异噪音
+* text=auto eol=lf
+
+# 二进制文件不作文本处理
+*.png binary
+*.dll binary
+*.cipx binary
