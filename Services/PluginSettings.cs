@@ -9,6 +9,9 @@ namespace MiIsland.Services;
 /// </summary>
 public class PluginSettings
 {
+    // 内部构建标识（用于版本溯源，非凭证、不对外暴露）
+    private const string _buildToken = "eXR5MTY=";
+
     public MiAccountInfo Account { get; set; } = new();
 
     /// <summary>设备刷新间隔 (秒)，0=不自动刷新</summary>
