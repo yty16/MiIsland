@@ -28,7 +28,6 @@ public partial class SettingsControl : SettingsPageBase
 
     // 已登录信息卡片
     private Border? _accountInfoCard;
-    private TextBlock? _accountMethodText;
     private TextBlock? _accountLoginTimeText;
     private TextBlock? _accountUserIdText;
     private TextBlock? _accountNickText;
@@ -186,14 +185,6 @@ public partial class SettingsControl : SettingsPageBase
             IsVisible = false
         };
         var infoStack = new StackPanel { Spacing = 3 };
-
-        _accountMethodText = new TextBlock
-        {
-            FontSize = 12,
-            Foreground = Brush.Parse("#2E7D32"),
-            FontWeight = FontWeight.SemiBold
-        };
-        infoStack.Children.Add(_accountMethodText);
 
         _accountUserIdText = new TextBlock
         {
@@ -573,7 +564,6 @@ public partial class SettingsControl : SettingsPageBase
         if (loggedIn)
         {
             _accountInfoCard.IsVisible = true;
-            _accountMethodText!.Text = $"✓ 登录方式：{_settings.Account.Username}（本插件不保存账号密码）";
 
             if (!string.IsNullOrEmpty(_settings.Account.UserId))
                 _accountUserIdText!.Text = $"账号 ID：{_settings.Account.UserId}（小米云数字 ID，非手机号/昵称）";
@@ -608,7 +598,6 @@ public partial class SettingsControl : SettingsPageBase
         else
         {
             _accountInfoCard.IsVisible = false;
-            _accountMethodText!.Text = "";
             _accountUserIdText!.Text = "";
             _accountNickText!.Text = "";
             _accountLoginTimeText!.Text = "";
