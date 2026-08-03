@@ -63,6 +63,9 @@ public class MiCloudService : IDisposable
     public string? CurrentCUserId => _session?.CUserId;
     public DateTime SessionExpiresAt => _session?.ExpiresAt ?? DateTime.MinValue;
 
+    /// <summary>最近一次云端 API 解密后的原始响应 (诊断用, UI 会显示片段)</summary>
+    public string? LastRawResponse { get; private set; }
+
     /// <summary>
     /// 全插件共享的唯一实例。设置页与桌面组件共用此实例，
     /// 以保证登录会话 (session/cookie) 跨页面、跨组件持续有效，
@@ -125,6 +128,10 @@ public class MiCloudService : IDisposable
                 NickName = nickName ?? "",
                 ExpiresAt = exp
             };
+            // 恢复 cookie,保证后续 API 请求带 serviceToken（与扫码登录路径保持一致）
+            InjectCookie("serviceToken", token);
+            if (!string.IsNullOrEmpty(userId))
+                InjectCookie("userId", userId);
             System.Diagnostics.Debug.WriteLine($"[MiCloud] Session restored: userId={userId}, expiresAt={exp:o}");
             return true;
         }
@@ -149,7 +156,7 @@ public class MiCloudService : IDisposable
         var result = await SendCloudApiAsync("/home/device_list", data);
 
         if (result is null)
-            return (null, "获取设备列表失败，请查看日志");
+            return (null, "获取设备列表失败 (请求或解密异常)，请查看日志");
 
         if (result.Value.TryGetProperty("result", out var resObj) &&
             resObj.TryGetProperty("list", out var list))
@@ -164,7 +171,10 @@ public class MiCloudService : IDisposable
             return (null, $"获取设备列表失败: {msg}");
         }
 
-        return (null, "设备列表为空或格式异常");
+        // 诊断: 把小米真实返回的原文片段透出, 便于排查 (上传 GitHub issue 时附带)
+        var raw = LastRawResponse ?? "";
+        var snippet = raw.Length > 300 ? raw[..300] : raw;
+        return (null, $"设备列表为空或格式异常。原始响应(前300字): {snippet}");
     }
 
     /// <summary>
@@ -815,6 +825,7 @@ public class MiCloudService : IDisposable
                 System.Diagnostics.Debug.WriteLine($"[MiCloud] API {path} decrypted: {plainText[..Math.Min(plainText.Length, 500)]}");
             }
 
+            LastRawResponse = plainText;
             return JsonSerializer.Deserialize<JsonElement>(plainText);
         }
         catch (Exception ex)
