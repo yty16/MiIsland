@@ -577,7 +577,7 @@ public partial class SettingsControl : SettingsPageBase
                 if (DateTime.TryParse(_settings.Account.LoginTime, out var loginDt))
                 {
                     var expireDt = loginDt.AddDays(7);
-                    _accountExpireText!.Text = $"Token 失效时间：{expireDt:yyyy-MM-dd HH:mm:ss}（约 {expireDt - DateTime.Now:dd\\ 天\\ hh\\ 小时} 后）";
+                    _accountExpireText!.Text = FormatExpireText(expireDt);
                 }
                 else
                 {
@@ -609,5 +609,18 @@ public partial class SettingsControl : SettingsPageBase
         }
         _settings.Save();
         this.Unloaded -= OnPageUnloaded;
+    }
+
+    private static string FormatExpireText(DateTime expireDt)
+    {
+        var remaining = expireDt - DateTime.Now;
+        var expireText = expireDt.ToString("yyyy-MM-dd HH:mm:ss");
+        if (remaining.TotalSeconds <= 0)
+            return $"Token 失效时间：{expireText}（已过期）";
+
+        var days = (int)remaining.TotalDays;
+        var hours = remaining.Hours;
+        var minutes = remaining.Minutes;
+        return $"Token 失效时间：{expireText}（约 {days} 天 {hours} 小时 {minutes} 分后）";
     }
 }
