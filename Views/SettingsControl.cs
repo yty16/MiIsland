@@ -26,6 +26,12 @@ public partial class SettingsControl : SettingsPageBase
     private TextBox? _refreshIntervalBox;
     private ItemsControl? _deviceListControl;
 
+    // 已登录信息卡片
+    private Border? _accountInfoCard;
+    private TextBlock? _accountMethodText;
+    private TextBlock? _accountLoginTimeText;
+    private TextBlock? _accountExpireText;
+
     // 扫码登录 UI
     private Border? _qrPanel;
     private Image? _qrImage;
@@ -165,6 +171,44 @@ public partial class SettingsControl : SettingsPageBase
         buttonRow.Children.Add(_logoutButton);
 
         section.Children.Add(buttonRow);
+
+        // 已登录信息卡片（仅登录后可见）
+        _accountInfoCard = new Border
+        {
+            Background = Brush.Parse("#E8F5E9"),
+            BorderBrush = Brush.Parse("#A5D6A7"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10),
+            Margin = new Thickness(0, 8, 0, 0),
+            IsVisible = false
+        };
+        var infoStack = new StackPanel { Spacing = 3 };
+
+        _accountMethodText = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = Brush.Parse("#2E7D32"),
+            FontWeight = FontWeight.SemiBold
+        };
+        infoStack.Children.Add(_accountMethodText);
+
+        _accountLoginTimeText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = Brush.Parse("#555555")
+        };
+        infoStack.Children.Add(_accountLoginTimeText);
+
+        _accountExpireText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = Brush.Parse("#777777")
+        };
+        infoStack.Children.Add(_accountExpireText);
+
+        _accountInfoCard.Child = infoStack;
+        section.Children.Add(_accountInfoCard);
 
         // 扫码登录面板（初始隐藏）
         _qrPanel = new Border
@@ -370,7 +414,9 @@ public partial class SettingsControl : SettingsPageBase
         {
             if (success)
             {
+                var now = DateTime.Now;
                 _settings.Account.Username = "[扫码登录]";
+                _settings.Account.LoginTime = now.ToString("yyyy-MM-dd HH:mm:ss");
                 _settings.Save();
                 _qrStatusText!.Text = "✓ 扫码登录成功";
                 _qrStatusText.Foreground = Brush.Parse("#4CAF50");
@@ -495,6 +541,42 @@ public partial class SettingsControl : SettingsPageBase
         var loggedIn = _cloudService.IsLoggedIn;
         if (_logoutButton != null) _logoutButton.IsVisible = loggedIn;
         if (_qrButton != null) _qrButton.IsEnabled = !loggedIn;
+
+        // 已登录信息卡片
+        if (_accountInfoCard == null) return;
+
+        if (loggedIn)
+        {
+            _accountInfoCard.IsVisible = true;
+            _accountMethodText!.Text = $"✓ 登录方式：{_settings.Account.Username}（本插件不保存账号密码）";
+
+            if (!string.IsNullOrEmpty(_settings.Account.LoginTime))
+            {
+                _accountLoginTimeText!.Text = $"登录时间：{_settings.Account.LoginTime}";
+                // Token 默认 7 天有效期
+                if (DateTime.TryParse(_settings.Account.LoginTime, out var loginDt))
+                {
+                    var expireDt = loginDt.AddDays(7);
+                    _accountExpireText!.Text = $"Token 失效时间：{expireDt:yyyy-MM-dd HH:mm:ss}（约 {expireDt - DateTime.Now:dd\\ 天\\ hh\\ 小时} 后）";
+                }
+                else
+                {
+                    _accountExpireText!.Text = "Token 失效时间：-";
+                }
+            }
+            else
+            {
+                _accountLoginTimeText!.Text = "登录时间：-（本会话未刷新）";
+                _accountExpireText!.Text = "Token 失效时间：-";
+            }
+        }
+        else
+        {
+            _accountInfoCard.IsVisible = false;
+            _accountMethodText!.Text = "";
+            _accountLoginTimeText!.Text = "";
+            _accountExpireText!.Text = "";
+        }
     }
 
     private void OnPageUnloaded(object? sender, EventArgs e)

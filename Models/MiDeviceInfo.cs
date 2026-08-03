@@ -9,6 +9,9 @@ public class MiAccountInfo
 {
     /// <summary>登录方式标识 (例如 "[扫码登录]")；本插件不保存小米账号与密码</summary>
     public string Username { get; set; } = "";
+
+    /// <summary>最近一次成功登录的本地时间 (yyyy-MM-dd HH:mm:ss)；仅展示，不含账号信息</summary>
+    public string LoginTime { get; set; } = "";
 }
 
 /// <summary>
