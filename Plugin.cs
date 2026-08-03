@@ -13,9 +13,7 @@ public class Plugin : PluginBase
 {
     public override void Initialize(HostBuilderContext context, IServiceCollection services)
     {
-        // 注册米家云服务
-        services.AddSingleton<MiCloudService>();
-
+        // 米家云服务使用全局共享单例 MiCloudService.Instance（设置页与组件共用同一会话）。
         // 注册主界面组件
         services.AddComponent<MiHomeComponent>();
         

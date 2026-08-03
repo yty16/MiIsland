@@ -58,6 +58,16 @@ public class MiCloudService : IDisposable
     public bool IsLoggedIn => _session?.IsValid == true;
     public string? CurrentUserId => _session?.UserId;
 
+    /// <summary>
+    /// 全插件共享的唯一实例。设置页与桌面组件共用此实例，
+    /// 以保证登录会话 (session/cookie) 跨页面、跨组件持续有效，
+    /// 避免「离开设置页就登出」与「组件拿不到设备」的问题。
+    /// </summary>
+    public static MiCloudService Instance { get; } = new MiCloudService();
+
+    /// <summary>登录状态变更事件（登录成功或登出时触发），供桌面组件自动刷新设备。</summary>
+    public static event System.EventHandler? LoginStateChanged;
+
     // 注意：本项目仅支持「扫码登录」，已移除账号密码登录，
     // 因此本服务不处理、不存储任何账号或密码。
 
@@ -260,6 +270,8 @@ public class MiCloudService : IDisposable
         _qrCts?.Cancel();
         _qrCts?.Dispose();
         _qrCts = null;
+        System.Diagnostics.Debug.WriteLine("[MiCloud] Logged out");
+        LoginStateChanged?.Invoke(this, System.EventArgs.Empty);
     }
 
     // === 扫码登录 API ===
@@ -488,6 +500,7 @@ public class MiCloudService : IDisposable
             };
 
             System.Diagnostics.Debug.WriteLine($"[MiCloud] QR Login success: userId={_pendingUserId}");
+            LoginStateChanged?.Invoke(this, System.EventArgs.Empty);
             return (true, "扫码登录成功");
         }
         catch (Exception ex)

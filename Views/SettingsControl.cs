@@ -16,7 +16,7 @@ namespace MiIsland.Views;
 public partial class SettingsControl : SettingsPageBase
 {
     private readonly PluginSettings _settings;
-    private readonly MiCloudService _cloudService = new();
+    private readonly MiCloudService _cloudService = MiCloudService.Instance;
 
     // UI 控件引用
     private Button? _qrButton;

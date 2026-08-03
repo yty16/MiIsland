@@ -22,7 +22,7 @@ namespace MiIsland.Views;
 )]
 public class MiHomeComponent : ComponentBase
 {
-    private readonly MiCloudService _cloudService = new();
+    private readonly MiCloudService _cloudService = MiCloudService.Instance;
     private readonly PluginSettings _settings;
     private readonly ObservableCollection<MiDeviceStatus> _deviceStatuses = new();
     private List<MiCloudDevice>? _cloudDevices;
@@ -40,6 +40,7 @@ public class MiHomeComponent : ComponentBase
     {
         _settings = PluginSettings.Load();
         this.Unloaded += OnComponentUnloaded;
+        MiCloudService.LoginStateChanged += OnLoginStateChanged;
     }
 
     protected override void OnInitialized()
@@ -377,7 +378,18 @@ public class MiHomeComponent : ComponentBase
         _refreshCts?.Cancel();
         _refreshTimer?.Stop();
         _refreshTimer?.Dispose();
-        _cloudService.Dispose();
+        // 注意：_cloudService 是全局共享单例，不能在组件卸载时 Dispose，否则会破坏登录会话。
+        MiCloudService.LoginStateChanged -= OnLoginStateChanged;
         this.Unloaded -= OnComponentUnloaded;
+    }
+
+    /// <summary>登录状态变化（设置页扫码成功 / 登出）时，自动刷新设备列表并启动定时器。</summary>
+    private void OnLoginStateChanged(object? sender, EventArgs e)
+    {
+        if (_cloudService.IsLoggedIn)
+        {
+            _refreshTimer?.Start();
+        }
+        _ = RefreshAllAsync();
     }
 }
