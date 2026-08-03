@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -301,7 +302,8 @@ public partial class SettingsControl : SettingsPageBase
         // 设备列表
         _deviceListControl = new ItemsControl
         {
-            Margin = new Thickness(0, 4, 0, 0)
+            Margin = new Thickness(0, 4, 0, 0),
+            ItemTemplate = new FuncDataTemplate<MiCloudDevice>((device, _) => BuildDeviceRow(device))
         };
         section.Children.Add(_deviceListControl);
 
@@ -481,65 +483,11 @@ public partial class SettingsControl : SettingsPageBase
                 {
                     _deviceCountText.Text = $"共 {devices.Count} 台设备";
                     _deviceListControl!.ItemsSource = devices;
-
-                    // 构建简单的设备列表显示
-                    var stackPanel = new StackPanel { Spacing = 4 };
-                    foreach (var device in devices)
-                    {
-                        var row = new StackPanel
-                        {
-                            Orientation = Orientation.Horizontal,
-                            Spacing = 8,
-                            Margin = new Thickness(0, 2)
-                        };
-
-                        var dot = new Border
-                        {
-                            Width = 8,
-                            Height = 8,
-                            CornerRadius = new CornerRadius(4),
-                            Background = device.IsOnline
-                                ? Brush.Parse("#4CAF50")
-                                : Brush.Parse("#9E9E9E"),
-                            VerticalAlignment = VerticalAlignment.Center
-                        };
-                        row.Children.Add(dot);
-
-                        row.Children.Add(new TextBlock
-                        {
-                            Text = device.Name,
-                            FontSize = 12,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Width = 140
-                        });
-
-                        row.Children.Add(new TextBlock
-                        {
-                            Text = device.Model,
-                            FontSize = 10,
-                            Foreground = Brush.Parse("#999999"),
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Width = 120
-                        });
-
-                        row.Children.Add(new TextBlock
-                        {
-                            Text = device.IsOnline ? "在线" : "离线",
-                            FontSize = 10,
-                            Foreground = device.IsOnline
-                                ? Brush.Parse("#4CAF50")
-                                : Brush.Parse("#9E9E9E"),
-                            VerticalAlignment = VerticalAlignment.Center
-                        });
-
-                        stackPanel.Children.Add(row);
-                    }
-
-                    _deviceListControl.ItemsSource = devices;
                 }
                 else
                 {
                     _deviceCountText.Text = $"✗ {error ?? "加载失败"}";
+                    _deviceListControl!.ItemsSource = null;
                 }
             });
         }
@@ -550,6 +498,53 @@ public partial class SettingsControl : SettingsPageBase
                 _deviceCountText.Text = $"✗ 加载异常: {ex.Message}";
             });
         }
+    }
+
+    /// <summary>单个设备行 (绿点 + 名称 + 型号 + 在线状态)，供 ItemsControl.ItemTemplate 使用</summary>
+    private static Control BuildDeviceRow(MiCloudDevice device)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(0, 2)
+        };
+
+        row.Children.Add(new Border
+        {
+            Width = 8,
+            Height = 8,
+            CornerRadius = new CornerRadius(4),
+            Background = device.IsOnline ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = device.Name,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 140
+        });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = device.Model,
+            FontSize = 10,
+            Foreground = Brush.Parse("#999999"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 120
+        });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = device.IsOnline ? "在线" : "离线",
+            FontSize = 10,
+            Foreground = device.IsOnline ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        return row;
     }
 
     private void UpdateLoginStatus()

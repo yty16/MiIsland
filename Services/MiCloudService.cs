@@ -766,15 +766,15 @@ public class MiCloudService : IDisposable
         var signedNonce = SignNonce(nonce);
         var key = Convert.FromBase64String(signedNonce);
 
-        // 1) 原始 params，先计算 rc4_hash__（保持固定顺序：data, rc4_hash__）
+        // 1) 原始 params，先计算 rc4_hash（保持固定顺序：data, rc4_hash）
         var rawParams = new List<KeyValuePair<string, string>>
         {
             new("data", dataJson)
         };
-        rawParams.Add(new KeyValuePair<string, string>("rc4_hash__",
+        rawParams.Add(new KeyValuePair<string, string>("rc4_hash",
             GenerateCloudSignature(url, signedNonce, rawParams)));
 
-        // 2) RC4 加密所有值（_signature 稍后加，不参与加密）
+        // 2) RC4 加密所有值（signature 稍后加，不参与加密）
         var encryptedParams = new List<KeyValuePair<string, string>>();
         foreach (var kv in rawParams)
         {
@@ -782,9 +782,13 @@ public class MiCloudService : IDisposable
             encryptedParams.Add(new KeyValuePair<string, string>(kv.Key, Convert.ToBase64String(encrypted)));
         }
 
-        // 3) 对加密后的 params 计算 _signature
-        encryptedParams.Add(new KeyValuePair<string, string>("_signature",
+        // 3) 对加密后的 params 计算 signature
+        encryptedParams.Add(new KeyValuePair<string, string>("signature",
             GenerateCloudSignature(url, signedNonce, encryptedParams)));
+
+        // 4) 补充 ssecurity 与 _nonce（不与 data 一起加密；不参与 signature 计算）
+        encryptedParams.Add(new KeyValuePair<string, string>("ssecurity", _session!.Ssecurity));
+        encryptedParams.Add(new KeyValuePair<string, string>("_nonce", nonce));
 
         // 4) 确保 data 字段存在（空字符串也可）
         if (!encryptedParams.Any(kv => kv.Key == "data"))
@@ -836,18 +840,20 @@ public class MiCloudService : IDisposable
     }
 
     /// <summary>
-    /// 生成小米 cloud API 签名
-    /// signature = base64(sha1("POST" + path + "?" + queryString + signedNonce))
-    /// 其中 path 为 URL 去掉 https://api.io.mi.com/app 后的部分
+    /// 生成小米 cloud API 签名（对齐 hass-xiaomi-miot 的 sha1_sign）
+    /// sign = SHA1( "POST" & path & "&" & "k=v" & ... & signedNonce )  —— 全部用 & 连接，无 ? 号
+    /// 注意：signedNonce 本身由 SHA256(ssec||nonce) 生成（见 SignNonce）。
     /// </summary>
     private static string GenerateCloudSignature(string url, string signedNonce,
         List<KeyValuePair<string, string>> parameters)
     {
         var path = url.Replace(ApiBase, ""); // e.g. /home/device_list
-        var pairs = parameters.Select(kv => $"{kv.Key}={kv.Value}");
-        var signatureString = string.Join("&", pairs);
-        var s = $"POST{path}?{signatureString}{signedNonce}";
+        var arr = new List<string> { "POST", path };
+        foreach (var kv in parameters)
+            arr.Add($"{kv.Key}={kv.Value}");
+        arr.Add(signedNonce);
 
+        var s = string.Join("&", arr);
         var hash = SHA1.HashData(Encoding.UTF8.GetBytes(s));
         return Convert.ToBase64String(hash);
     }
@@ -878,25 +884,26 @@ public class MiCloudService : IDisposable
         return result;
     }
 
-    /// <summary>生成随机 nonce（与小米协议一致：time + random）</summary>
+    /// <summary>生成随机 nonce（与小米协议一致：8字节随机 + 4字节时间戳 big-endian，共12字节）</summary>
     private static string GenerateNonce()
     {
-        var millis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var timeBytes = BitConverter.GetBytes(millis / 60000);
-        if (BitConverter.IsLittleEndian)
-            Array.Reverse(timeBytes);
-
         var random = new byte[8];
         Random.Shared.NextBytes(random);
 
-        var nonce = new byte[16];
-        Array.Copy(timeBytes, 0, nonce, 0, 8);
-        Array.Copy(random, 0, nonce, 8, 8);
+        var minutes = (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60);
+        var timeBytes = BitConverter.GetBytes(minutes);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(timeBytes); // 4 字节 big-endian
+
+        var nonce = new byte[12];
+        Array.Copy(random, 0, nonce, 0, 8);
+        Array.Copy(timeBytes, 0, nonce, 8, 4);
         return Convert.ToBase64String(nonce);
     }
 
     /// <summary>
-    /// 用 ssecurity 签名 nonce: base64(sha1(ssecurity_bytes + nonce_bytes))
+    /// 用 ssecurity 签名 nonce: base64(sha256(ssecurity_bytes + nonce_bytes))
+    /// 对齐 hass-xiaomi-miot：signed_nonce = SHA256(ssec || nonce)
     /// </summary>
     private string SignNonce(string nonce)
     {
@@ -906,7 +913,7 @@ public class MiCloudService : IDisposable
         Array.Copy(ssecBytes, 0, combined, 0, ssecBytes.Length);
         Array.Copy(nonceBytes, 0, combined, ssecBytes.Length, nonceBytes.Length);
 
-        var hash = SHA1.HashData(combined);
+        var hash = SHA256.HashData(combined);
         return Convert.ToBase64String(hash);
     }
 
