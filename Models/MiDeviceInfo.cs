@@ -12,6 +12,9 @@ public class MiAccountInfo
 
     /// <summary>最近一次成功登录的本地时间 (yyyy-MM-dd HH:mm:ss)；仅展示，不含账号信息</summary>
     public string LoginTime { get; set; } = "";
+
+    /// <summary>小米云返回的数字账号 ID（userId），仅本地展示用</summary>
+    public string UserId { get; set; } = "";
 }
 
 /// <summary>
