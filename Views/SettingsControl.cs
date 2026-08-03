@@ -12,7 +12,7 @@ using MiIsland.Services;
 
 namespace MiIsland.Views;
 
-[SettingsPageInfo("F2A9C1E3-7B4D-4F8A-9C2E-1D3F5A7B9C0E", "MiIsland 设置")]
+[SettingsPageInfo("F2A9C1E3-7B4D-4F8A-9C2E-1D3F5A7B9C0E", "MiIsland 设置", "\ue994", "\ue993")]
 public partial class SettingsControl : SettingsPageBase
 {
     private readonly PluginSettings _settings;
