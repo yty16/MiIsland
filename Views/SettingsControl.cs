@@ -435,6 +435,13 @@ public partial class SettingsControl : SettingsPageBase
                 _settings.Account.LoginTime = now.ToString("yyyy-MM-dd HH:mm:ss");
                 _settings.Account.UserId = _cloudService.CurrentUserId ?? "";
                 _settings.Account.NickName = _cloudService.CurrentNickName ?? "";
+                // 持久化登录 session,下次启动 / 切换页面自动恢复,无需重新扫码
+                _settings.Account.ServiceToken = MiCloudService.Obfuscate(_cloudService.CurrentServiceToken);
+                _settings.Account.Ssecurity = MiCloudService.Obfuscate(_cloudService.CurrentSsecurity);
+                _settings.Account.CUserId = _cloudService.CurrentCUserId ?? "";
+                _settings.Account.ExpiresAt = (_cloudService.SessionExpiresAt > DateTime.MinValue
+                    ? _cloudService.SessionExpiresAt
+                    : now.AddDays(7)).ToString("o");
                 _settings.Save();
                 _qrStatusText!.Text = "✓ 扫码登录成功";
                 _qrStatusText.Foreground = Brush.Parse("#4CAF50");

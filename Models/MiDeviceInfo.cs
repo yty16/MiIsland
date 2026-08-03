@@ -18,6 +18,18 @@ public class MiAccountInfo
 
     /// <summary>小米账号昵称（米家昵称），仅本地展示用</summary>
     public string NickName { get; set; } = "";
+
+    /// <summary>云端会话令牌 serviceToken（经简单可逆混淆后保存），用于下次自动恢复登录态</summary>
+    public string ServiceToken { get; set; } = "";
+
+    /// <summary>小米云返回的 ssecurity（经简单可逆混淆后保存），用于签名/加密</summary>
+    public string Ssecurity { get; set; } = "";
+
+    /// <summary>云端 cUserId（业务账号 ID，与 userId 略有不同）</summary>
+    public string CUserId { get; set; } = "";
+
+    /// <summary>token 本地过期时间（ISO 8601）。到期前 PluginSettings.Load() 会自动恢复登录</summary>
+    public string ExpiresAt { get; set; } = "";
 }
 
 /// <summary>

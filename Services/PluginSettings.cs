@@ -42,7 +42,21 @@ public class PluginSettings
             {
                 var json = File.ReadAllText(SettingsPath);
                 var settings = JsonSerializer.Deserialize<PluginSettings>(json);
-                if (settings != null) return settings;
+                if (settings != null)
+                {
+                    // 自动恢复登录 session(如果尚未过期)
+                    if (!string.IsNullOrEmpty(settings.Account.ServiceToken))
+                    {
+                        MiCloudService.Instance.TryRestoreSession(
+                            settings.Account.ServiceToken,
+                            settings.Account.Ssecurity,
+                            settings.Account.UserId,
+                            settings.Account.CUserId,
+                            settings.Account.ExpiresAt,
+                            settings.Account.NickName);
+                    }
+                    return settings;
+                }
             }
         }
         catch (Exception ex)

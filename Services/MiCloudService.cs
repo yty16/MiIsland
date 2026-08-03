@@ -58,6 +58,10 @@ public class MiCloudService : IDisposable
     public bool IsLoggedIn => _session?.IsValid == true;
     public string? CurrentUserId => _session?.UserId;
     public string? CurrentNickName => _session?.NickName;
+    public string? CurrentServiceToken => _session?.ServiceToken;
+    public string? CurrentSsecurity => _session?.Ssecurity;
+    public string? CurrentCUserId => _session?.CUserId;
+    public DateTime SessionExpiresAt => _session?.ExpiresAt ?? DateTime.MinValue;
 
     /// <summary>
     /// 全插件共享的唯一实例。设置页与桌面组件共用此实例，
@@ -68,6 +72,68 @@ public class MiCloudService : IDisposable
 
     /// <summary>登录状态变更事件（登录成功或登出时触发），供桌面组件自动刷新设备。</summary>
     public static event System.EventHandler? LoginStateChanged;
+
+    // === 持久化支持 ===
+
+    /// <summary>
+    /// 简单可逆混淆 (XOR + Base64) — 仅用于避免 token / ssecurity 在 settings.json 中以明文形式出现。
+    /// 注意:这不是加密,任何能读取本地文件的人仍可还原;真正的安全应使用 Windows DPAPI / Keychain。
+    /// </summary>
+    private const byte ObfuscateKey = 0x37;
+    public static string Obfuscate(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return "";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(raw);
+        for (int i = 0; i < bytes.Length; i++) bytes[i] ^= ObfuscateKey;
+        return Convert.ToBase64String(bytes);
+    }
+    public static string Deobfuscate(string? encoded)
+    {
+        if (string.IsNullOrEmpty(encoded)) return "";
+        try
+        {
+            var bytes = Convert.FromBase64String(encoded);
+            for (int i = 0; i < bytes.Length; i++) bytes[i] ^= ObfuscateKey;
+            return System.Text.Encoding.UTF8.GetString(bytes);
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// 尝试从持久化字段恢复登录态 (用户已在设置中允许保存账号信息)。
+    /// 失败 (字段缺失 / 已过期 / 反序列化错误) 时静默返回 false,UI 仍显示「未登录」。
+    /// </summary>
+    public bool TryRestoreSession(string obfuscatedToken, string obfuscatedSsecurity,
+                                   string userId, string cUserId, string expiresAtIso,
+                                   string? nickName = null)
+    {
+        try
+        {
+            var token = Deobfuscate(obfuscatedToken);
+            var ssec = Deobfuscate(obfuscatedSsecurity);
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(ssec)) return false;
+            if (!DateTime.TryParse(expiresAtIso, null, System.Globalization.DateTimeStyles.RoundtripKind, out var exp))
+                return false;
+            if (exp <= DateTime.Now) return false; // 已过期,需重新扫码
+
+            _session = new MiSession
+            {
+                UserId = userId,
+                ServiceToken = token,
+                Ssecurity = ssec,
+                CUserId = cUserId,
+                NickName = nickName ?? "",
+                ExpiresAt = exp
+            };
+            System.Diagnostics.Debug.WriteLine($"[MiCloud] Session restored: userId={userId}, expiresAt={exp:o}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MiCloud] RestoreSession error: {ex.Message}");
+            return false;
+        }
+    }
 
     // 注意：本项目仅支持「扫码登录」，已移除账号密码登录，
     // 因此本服务不处理、不存储任何账号或密码。
@@ -306,7 +372,9 @@ public class MiCloudService : IDisposable
     public void Logout()
     {
         _session = null;
-        _handler.CookieContainer = new CookieContainer();
+        // 注意：不能 _handler.CookieContainer = new CookieContainer();
+        // HttpClientHandler 在第一次发请求后禁止再改 CookieContainer,会抛 InvalidOperationException。
+        // Cookie 容器在构造函数里已经建好,保留无害:清掉 _session 后所有 API 入口会因 IsLoggedIn==false 短路返回。
         _qrCts?.Cancel();
         _qrCts?.Dispose();
         _qrCts = null;
