@@ -31,6 +31,7 @@ public partial class SettingsControl : SettingsPageBase
     private TextBlock? _accountMethodText;
     private TextBlock? _accountLoginTimeText;
     private TextBlock? _accountUserIdText;
+    private TextBlock? _accountNickText;
     private TextBlock? _accountExpireText;
 
     // 扫码登录 UI
@@ -200,6 +201,13 @@ public partial class SettingsControl : SettingsPageBase
             Foreground = Brush.Parse("#555555")
         };
         infoStack.Children.Add(_accountUserIdText);
+
+        _accountNickText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = Brush.Parse("#555555")
+        };
+        infoStack.Children.Add(_accountNickText);
 
         _accountLoginTimeText = new TextBlock
         {
@@ -426,6 +434,7 @@ public partial class SettingsControl : SettingsPageBase
                 _settings.Account.Username = "[扫码登录]";
                 _settings.Account.LoginTime = now.ToString("yyyy-MM-dd HH:mm:ss");
                 _settings.Account.UserId = _cloudService.CurrentUserId ?? "";
+                _settings.Account.NickName = _cloudService.CurrentNickName ?? "";
                 _settings.Save();
                 _qrStatusText!.Text = "✓ 扫码登录成功";
                 _qrStatusText.Foreground = Brush.Parse("#4CAF50");
@@ -564,6 +573,11 @@ public partial class SettingsControl : SettingsPageBase
             else
                 _accountUserIdText!.Text = "账号 ID：-";
 
+            if (!string.IsNullOrEmpty(_settings.Account.NickName))
+                _accountNickText!.Text = $"昵称：{_settings.Account.NickName}";
+            else
+                _accountNickText!.Text = "昵称：-（暂未获取）";
+
             if (!string.IsNullOrEmpty(_settings.Account.LoginTime))
             {
                 _accountLoginTimeText!.Text = $"登录时间：{_settings.Account.LoginTime}";
@@ -589,6 +603,7 @@ public partial class SettingsControl : SettingsPageBase
             _accountInfoCard.IsVisible = false;
             _accountMethodText!.Text = "";
             _accountUserIdText!.Text = "";
+            _accountNickText!.Text = "";
             _accountLoginTimeText!.Text = "";
             _accountExpireText!.Text = "";
         }

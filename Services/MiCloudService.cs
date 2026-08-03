@@ -57,6 +57,7 @@ public class MiCloudService : IDisposable
     /// <summary>获取当前登录状态</summary>
     public bool IsLoggedIn => _session?.IsValid == true;
     public string? CurrentUserId => _session?.UserId;
+    public string? CurrentNickName => _session?.NickName;
 
     /// <summary>
     /// 全插件共享的唯一实例。设置页与桌面组件共用此实例，
@@ -98,6 +99,45 @@ public class MiCloudService : IDisposable
         }
 
         return (null, "设备列表为空或格式异常");
+    }
+
+    /// <summary>
+    /// 获取小米账号昵称（米家昵称），通过米家云 /user/profile 接口。
+    /// 失败返回 null，不影响主登录流程。仅用于设置页展示。
+    /// </summary>
+    private async Task<string?> GetUserNicknameAsync()
+    {
+        if (!IsLoggedIn) return null;
+
+        // 米家云账号资料接口（不同版本路径可能不同），常见返回字段见 candidateFields
+        string[] candidatePaths = { "/user/profile", "/v2/user/profile" };
+        string[] candidateFields = { "nickName", "miliaoNick", "nickname", "userName", "name" };
+
+        foreach (var path in candidatePaths)
+        {
+            try
+            {
+                var resp = await SendCloudApiAsync(path, "{}");
+                if (resp == null) continue;
+
+                var root = resp.Value;
+                if (root.TryGetProperty("result", out var res) && res.ValueKind == JsonValueKind.Object)
+                    root = res;
+                if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                    root = data;
+
+                foreach (var field in candidateFields)
+                {
+                    var v = SafeGetString(root, field);
+                    if (!string.IsNullOrEmpty(v)) return v;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MiCloud] GetUserNicknameAsync {path} failed: {ex.Message}");
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -499,7 +539,18 @@ public class MiCloudService : IDisposable
                 ExpiresAt = DateTime.Now.AddDays(7)
             };
 
-            System.Diagnostics.Debug.WriteLine($"[MiCloud] QR Login success: userId={_pendingUserId}");
+            // 获取账号昵称（独立接口，失败不影响主登录流程）
+            try
+            {
+                _session.NickName = await GetUserNicknameAsync() ?? "";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MiCloud] get nickname failed: {ex.Message}");
+                _session.NickName = "";
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[MiCloud] QR Login success: userId={_pendingUserId} nick={_session.NickName}");
             LoginStateChanged?.Invoke(this, System.EventArgs.Empty);
             return (true, "扫码登录成功");
         }

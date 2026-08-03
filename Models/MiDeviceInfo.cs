@@ -15,6 +15,9 @@ public class MiAccountInfo
 
     /// <summary>小米云返回的数字账号 ID（userId），仅本地展示用</summary>
     public string UserId { get; set; } = "";
+
+    /// <summary>小米账号昵称（米家昵称），仅本地展示用</summary>
+    public string NickName { get; set; } = "";
 }
 
 /// <summary>
@@ -26,6 +29,7 @@ public class MiSession
     public string ServiceToken { get; set; } = "";
     public string Ssecurity { get; set; } = "";
     public string CUserId { get; set; } = "";
+    public string NickName { get; set; } = "";
     public DateTime ExpiresAt { get; set; } = DateTime.MinValue;
 
     public bool IsValid => !string.IsNullOrEmpty(ServiceToken)
