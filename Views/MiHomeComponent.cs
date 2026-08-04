@@ -27,6 +27,8 @@ public class MiHomeComponent : ComponentBase
     private readonly ObservableCollection<MiDeviceStatus> _deviceStatuses = new();
     private List<MiCloudDevice>? _cloudDevices;
     private Timer? _refreshTimer;
+    private Timer? _brightnessTimer;
+    private (string Did, int Value)? _pendingBrightness;
     private CancellationTokenSource? _refreshCts;
 
     // UI控件
@@ -156,66 +158,115 @@ public class MiHomeComponent : ComponentBase
                 Background = Brush.Parse("#1A000000")
             };
 
-            var grid = new Grid
+            var root = new StackPanel { Spacing = 4 };
+
+            // === 第一行: 状态点 + 名称 + 状态文字 + 右侧控件 ===
+            var top = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
                 RowDefinitions = new RowDefinitions("Auto,Auto")
             };
 
-            // 状态圆点
             var dot = new Border
             {
                 Width = 10, Height = 10,
                 CornerRadius = new CornerRadius(5),
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0)
+                Margin = new Thickness(0, 0, 10, 0),
+                Background = Brush.Parse(status.StatusColor)
             };
-            dot.Bind(Border.BackgroundProperty, new Avalonia.Data.Binding("StatusColor"));
             Grid.SetRowSpan(dot, 2);
-            grid.Children.Add(dot);
+            top.Children.Add(dot);
 
-            // 设备名
             var nameText = new TextBlock
             {
+                Text = status.Name,
                 FontSize = 13,
                 FontWeight = FontWeight.Medium,
                 Foreground = Brush.Parse("#333333")
             };
-            nameText.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding("Name"));
             Grid.SetRow(nameText, 0);
             Grid.SetColumn(nameText, 1);
-            grid.Children.Add(nameText);
+            top.Children.Add(nameText);
 
-            // 状态文本
             var statusText = new TextBlock
             {
+                Text = status.Kind == MiDeviceKind.Sensor ? status.SensorText : status.StatusText,
                 FontSize = 11,
                 Foreground = Brush.Parse("#9E9E9E"),
                 Margin = new Thickness(0, 2, 0, 0)
             };
-            statusText.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding("StatusText"));
             Grid.SetRow(statusText, 1);
             Grid.SetColumn(statusText, 1);
-            grid.Children.Add(statusText);
+            top.Children.Add(statusText);
 
-            // 开关
-            var toggleBtn = new Button
+            // 右侧控件按设备类型渲染
+            if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic)
             {
-                Width = 44, Height = 30,
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Content = "开关",
-                Background = Brush.Parse("#E0E0E0"),
-                Foreground = Brush.Parse("#333333"),
-                CornerRadius = new CornerRadius(4),
-                Tag = status.Did
-            };
-            toggleBtn.Click += OnDeviceToggleClick;
-            Grid.SetRowSpan(toggleBtn, 2);
-            Grid.SetColumn(toggleBtn, 2);
-            grid.Children.Add(toggleBtn);
+                var toggleBtn = new Button
+                {
+                    Content = status.PowerButtonText,
+                    FontSize = 12,
+                    Width = 56, Height = 30,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Background = Brush.Parse(status.PowerButtonColor),
+                    Foreground = Brush.Parse("#FFFFFF"),
+                    CornerRadius = new CornerRadius(4),
+                    Tag = status.Did
+                };
+                toggleBtn.Click += OnDeviceToggleClick;
+                Grid.SetRowSpan(toggleBtn, 2);
+                Grid.SetColumn(toggleBtn, 2);
+                top.Children.Add(toggleBtn);
+            }
+            else if (status.Kind == MiDeviceKind.Curtain)
+            {
+                var panel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 4,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                foreach (var (label, action) in new[] { ("开", "open"), ("停", "pause"), ("关", "close") })
+                {
+                    var b = new Button
+                    {
+                        Content = label,
+                        FontSize = 11,
+                        Padding = new Thickness(8, 2),
+                        Background = Brush.Parse("#E0E0E0"),
+                        Foreground = Brush.Parse("#333333"),
+                        CornerRadius = new CornerRadius(3),
+                        Tag = $"{status.Did}:{action}"
+                    };
+                    b.Click += OnCurtainClick;
+                    panel.Children.Add(b);
+                }
+                Grid.SetRowSpan(panel, 2);
+                Grid.SetColumn(panel, 2);
+                top.Children.Add(panel);
+            }
+            // Sensor: 只读展示, 无控件
 
-            card.Child = grid;
+            root.Children.Add(top);
+
+            // === 灯: 亮度滑块 (先设值再挂事件, 避免初始赋值误触发 RPC) ===
+            if (status.Kind == MiDeviceKind.Light)
+            {
+                var slider = new Slider
+                {
+                    Minimum = 0,
+                    Maximum = 100,
+                    Margin = new Thickness(0, 6, 0, 0),
+                    Tag = status.Did
+                };
+                var didLocal = status.Did;
+                slider.Value = Math.Clamp(status.Brightness ?? 50, 0, 100);
+                slider.ValueChanged += (_, _) => ScheduleBrightnessSet(didLocal, slider.Value);
+                root.Children.Add(slider);
+            }
+
+            card.Child = root;
             return card;
         });
     }
@@ -224,8 +275,7 @@ public class MiHomeComponent : ComponentBase
 
     private async Task AutoLoginAndRefreshAsync()
     {
-        // 本插件仅支持扫码登录（授权保存在内存中，重启后失效），
-        // 因此启动时不自动登录；如已登录（会话未过期）则直接刷新设备。
+        // 登录态已持久化到插件目录 (卸载即失效), 启动若会话仍有效则直接拉设备。
         if (_cloudService.IsLoggedIn)
         {
             _refreshTimer?.Start();
@@ -307,19 +357,8 @@ public class MiHomeComponent : ComponentBase
 
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        var existing = _deviceStatuses.FirstOrDefault(
-                            d => d.Did == status.Did);
-                        if (existing != null)
-                        {
-                            var idx = _deviceStatuses.IndexOf(existing);
-                            _deviceStatuses[idx] = status;
-                        }
-                        else
-                        {
-                            _deviceStatuses.Add(status);
-                        }
-
-                        _devicesList!.ItemsSource = _deviceStatuses;
+                        UpsertStatus(status);
+                        RefreshDeviceListUi();
 
                         if (_refreshTimeText != null)
                             _refreshTimeText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
@@ -334,41 +373,139 @@ public class MiHomeComponent : ComponentBase
         }
     }
 
-    // === 开关控制 ===
+    /// <summary>按 did 更新或新增一条状态</summary>
+    private void UpsertStatus(MiDeviceStatus status)
+    {
+        for (var i = 0; i < _deviceStatuses.Count; i++)
+        {
+            if (_deviceStatuses[i].Did == status.Did)
+            {
+                _deviceStatuses[i] = status;
+                return;
+            }
+        }
+        _deviceStatuses.Add(status);
+    }
+
+    /// <summary>强制整列重新渲染 (模板为一次性绑定, 重新挂 ItemsSource 才能反映最新状态)</summary>
+    private void RefreshDeviceListUi()
+    {
+        if (_devicesList == null) return;
+        _devicesList.ItemsSource = null;
+        _devicesList.ItemsSource = _deviceStatuses;
+    }
+
+    private void SetStatusText(string text, string color)
+    {
+        Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (_statusText != null)
+            {
+                _statusText.Text = text;
+                _statusText.Foreground = Brush.Parse(color);
+            }
+        });
+    }
+
+    // === 开关 / 亮度 / 窗帘控制 (操作后回查真实状态) ===
 
     private async void OnDeviceToggleClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button button || button.Tag is not string did)
-            return;
-
+        if (sender is not Button button || button.Tag is not string did) return;
         var status = _deviceStatuses.FirstOrDefault(d => d.Did == did);
         if (status == null) return;
 
         var newState = !status.IsPoweredOn;
-        var success = await _cloudService.SetPowerAsync(did, newState);
-
-        if (success)
+        button.IsEnabled = false;
+        try
         {
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            var ok = await _cloudService.SetPowerAsync(did, newState);
+            if (ok)
             {
-                status.IsPoweredOn = newState;
-                status.LastUpdated = DateTime.Now;
-                var idx = _deviceStatuses.IndexOf(status);
-                if (idx >= 0)
-                    _deviceStatuses[idx] = status;
-            });
+                await RequeryDeviceAsync(did);
+                SetStatusText($"已{(newState ? "开启" : "关闭")}：{status.Name}", "#4CAF50");
+            }
+            else
+            {
+                SetStatusText("设备控制失败，请检查网络", "#F44336");
+            }
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
+    }
+
+    private async void OnCurtainClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string tag) return;
+        var parts = tag.Split(':');
+        if (parts.Length != 2) return;
+        var did = parts[0];
+        var action = parts[1];
+
+        button.IsEnabled = false;
+        try
+        {
+            var ok = await _cloudService.SetCurtainAsync(did, action);
+            if (ok)
+            {
+                await RequeryDeviceAsync(did);
+                SetStatusText($"窗帘已{action}：{did}", "#4CAF50");
+            }
+            else
+            {
+                SetStatusText("窗帘控制失败", "#F44336");
+            }
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
+    }
+
+    private void ScheduleBrightnessSet(string did, double value)
+    {
+        _pendingBrightness = (did, (int)Math.Round(value));
+
+        _brightnessTimer ??= new Timer(500) { AutoReset = false };
+        _brightnessTimer.Elapsed -= OnBrightnessTimerElapsed;
+        _brightnessTimer.Elapsed += OnBrightnessTimerElapsed;
+        _brightnessTimer.Stop();
+        _brightnessTimer.Start();
+    }
+
+    private async void OnBrightnessTimerElapsed(object? sender, ElapsedEventArgs e)
+    {
+        if (_pendingBrightness is not { } pending) return;
+        _pendingBrightness = null;
+
+        var ok = await _cloudService.SetBrightnessAsync(pending.Did, pending.Value);
+        if (ok)
+        {
+            await RequeryDeviceAsync(pending.Did);
+            SetStatusText($"亮度已设为 {pending.Value}%", "#4CAF50");
         }
         else
         {
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (_statusText != null)
-                {
-                    _statusText.Text = "设备控制失败，请检查网络";
-                    _statusText.Foreground = Brush.Parse("#F44336");
-                }
-            });
+            SetStatusText("亮度调节失败", "#F44336");
         }
+    }
+
+    /// <summary>操作后回查设备真实状态并刷新 UI</summary>
+    private async Task RequeryDeviceAsync(string did)
+    {
+        var device = _cloudDevices?.FirstOrDefault(d => d.Did == did);
+        if (device == null) return;
+
+        var newStatus = await _cloudService.GetDeviceStatusAsync(device);
+        if (newStatus == null) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            UpsertStatus(newStatus);
+            RefreshDeviceListUi();
+        });
     }
 
     // === 清理 ===
@@ -378,6 +515,8 @@ public class MiHomeComponent : ComponentBase
         _refreshCts?.Cancel();
         _refreshTimer?.Stop();
         _refreshTimer?.Dispose();
+        _brightnessTimer?.Stop();
+        _brightnessTimer?.Dispose();
         // 注意：_cloudService 是全局共享单例，不能在组件卸载时 Dispose，否则会破坏登录会话。
         MiCloudService.LoginStateChanged -= OnLoginStateChanged;
         this.Unloaded -= OnComponentUnloaded;

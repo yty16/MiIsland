@@ -82,12 +82,32 @@ public class MiCloudDevice
 }
 
 /// <summary>
+/// 设备类型 (按 model 前缀粗分, 决定组件展示哪些控件)
+/// </summary>
+public enum MiDeviceKind
+{
+    Unknown,
+    /// <summary>灯: 电源 + 亮度</summary>
+    Light,
+    /// <summary>开关 / 插座: 仅电源</summary>
+    Switch,
+    /// <summary>传感器 (温湿度等): 只读展示</summary>
+    Sensor,
+    /// <summary>窗帘: 开 / 停 / 关</summary>
+    Curtain,
+    /// <summary>其他有电源属性的设备: 电源开关</summary>
+    Generic
+}
+
+/// <summary>
 /// 设备实时状态 (UI绑定)
 /// </summary>
 public class MiDeviceStatus
 {
     public string Name { get; set; } = "";
     public string Did { get; set; } = "";
+    public string Model { get; set; } = "";
+    public MiDeviceKind Kind { get; set; } = MiDeviceKind.Unknown;
     public bool IsOnline { get; set; }
     public bool IsPoweredOn { get; set; }
     public int? Brightness { get; set; }
@@ -96,6 +116,12 @@ public class MiDeviceStatus
     public string? LastError { get; set; }
     public DateTime LastUpdated { get; set; }
 
+    /// <summary>电源开关按钮文案 (随状态翻转)</summary>
+    public string PowerButtonText => IsPoweredOn ? "关闭" : "开启";
+
+    /// <summary>电源开关按钮背景色 (开=绿, 关=灰)</summary>
+    public string PowerButtonColor => IsPoweredOn ? "#4CAF50" : "#9E9E9E";
+
     public string StatusText => IsOnline
         ? (IsPoweredOn ? "已开启" : "已关闭")
         : "离线";
@@ -103,4 +129,16 @@ public class MiDeviceStatus
     public string StatusColor => IsOnline
         ? (IsPoweredOn ? "#4CAF50" : "#9E9E9E")
         : "#F44336";
+
+    /// <summary>传感器副标题 (温湿度)</summary>
+    public string SensorText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (Temperature.HasValue) parts.Add($"温度 {Temperature:F1}°C");
+            if (Humidity.HasValue) parts.Add($"湿度 {Humidity:F0}%");
+            return parts.Count > 0 ? string.Join("  ", parts) : "无数据";
+        }
+    }
 }

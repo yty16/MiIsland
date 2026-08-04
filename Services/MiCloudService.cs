@@ -308,6 +308,53 @@ public class MiCloudService : IDisposable
     }
 
     /// <summary>
+    /// 按设备 model 前缀粗分类型, 决定组件展示哪些控件。
+    /// 这是启发式分类 (不拉 miot spec), 覆盖常见品类; 未知型号回退到 Generic (电源开关)。
+    /// </summary>
+    public static MiDeviceKind ClassifyDevice(MiCloudDevice device)
+    {
+        var m = device.Model.ToLowerInvariant();
+        var n = device.Name.ToLowerInvariant();
+
+        // 传感器 (温湿度等, 一般没有电源属性)
+        if (m.Contains("sensor") || m.Contains("weather") || m.Contains("temp") ||
+            m.Contains("humid") || m.Contains("cgllc.airm") || n.Contains("温湿度") ||
+            n.Contains("传感器"))
+            return MiDeviceKind.Sensor;
+
+        // 窗帘
+        if (m.Contains("curtain") || n.Contains("窗帘"))
+            return MiDeviceKind.Curtain;
+
+        // 灯 (含亮度)
+        if (m.Contains("light") || m.Contains("yeelink") || m.Contains("bulb") ||
+            m.Contains("lamp") || m.Contains("philips") || m.Contains("ceiling") ||
+            n.Contains("灯") || n.Contains("筒灯") || n.Contains("吸顶灯"))
+            return MiDeviceKind.Light;
+
+        // 开关 / 插座
+        if (m.Contains("switch") || m.Contains("plug") || m.Contains("socket") ||
+            m.Contains("ctrl") || m.Contains("cgllc") || m.Contains("dingwei") ||
+            n.Contains("插座") || n.Contains("开关"))
+            return MiDeviceKind.Switch;
+
+        return MiDeviceKind.Generic;
+    }
+
+    /// <summary>
+    /// 控制窗帘: open/close/pause
+    /// </summary>
+    public async Task<bool> SetCurtainAsync(string did, string action)
+    {
+        if (action is not ("open" or "close" or "pause")) return false;
+        var result = await CallRpcAsync(did, "set_curtain", new object[] { action });
+        if (result == null) return false;
+        if (result.Value.ValueKind == JsonValueKind.Array && result.Value.GetArrayLength() > 0)
+            return result.Value[0].GetString() == "ok";
+        return result.Value.GetRawText().Contains("ok");
+    }
+
+    /// <summary>
     /// 获取设备完整状态 (一次RPC批量查询)
     /// </summary>
     public async Task<MiDeviceStatus?> GetDeviceStatusAsync(MiCloudDevice device)
@@ -316,6 +363,8 @@ public class MiCloudService : IDisposable
         {
             Name = device.Name,
             Did = device.Did,
+            Model = device.Model,
+            Kind = ClassifyDevice(device),
             IsOnline = device.IsOnline,
             LastUpdated = DateTime.Now
         };
