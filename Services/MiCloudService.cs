@@ -66,6 +66,9 @@ public class MiCloudService : IDisposable
     /// <summary>最近一次云端 API 解密后的原始响应 (诊断用, UI 会显示片段)</summary>
     public string? LastRawResponse { get; private set; }
 
+    /// <summary>最近一次云端 API 调用的具体错误 (HTTP 状态码 / 异常 / 解析失败等)，供 UI 直接透出。</summary>
+    public string? LastError { get; private set; }
+
     /// <summary>
     /// 全插件共享的唯一实例。设置页与桌面组件共用此实例，
     /// 以保证登录会话 (session/cookie) 跨页面、跨组件持续有效，
@@ -152,11 +155,15 @@ public class MiCloudService : IDisposable
     {
         if (!EnsureSession(out var err)) return (null, err);
 
-        var data = """{"getVirtualModel":true,"getHuamiDevices":1}""";
+        LastError = null;
+        var data = """{"getVirtualModel":true,"getHuamiDevices":1,"get_split_device":false,"support_smart_home":true}""";
         var result = await SendCloudApiAsync("/home/device_list", data);
 
         if (result is null)
-            return (null, "获取设备列表失败 (请求或解密异常)，请查看日志");
+        {
+            var detail = LastError ?? "未知异常";
+            return (null, $"获取设备列表失败: {detail}");
+        }
 
         if (result.Value.TryGetProperty("result", out var resObj) &&
             resObj.TryGetProperty("list", out var list))
@@ -803,10 +810,27 @@ public class MiCloudService : IDisposable
 
         System.Diagnostics.Debug.WriteLine($"[MiCloud] API {path}: data={dataJson}");
 
-        var response = await _client.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        HttpResponseMessage? response = null;
+        string body = "";
+        try
+        {
+            response = await _client.SendAsync(request);
+            body = await response.Content.ReadAsStringAsync();
+        }
+        catch (Exception ex)
+        {
+            LastError = $"HTTP 请求失败: {ex.GetType().Name}: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"[MiCloud] API {path} http error: {ex.Message}");
+            return null;
+        }
 
         System.Diagnostics.Debug.WriteLine($"[MiCloud] API {path} response ({response.StatusCode}): {body[..Math.Min(body.Length, 500)]}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LastError = $"HTTP {(int)response.StatusCode} {response.StatusCode}：{(body.Length > 200 ? body[..200] : body)}";
+            return null;
+        }
 
         try
         {
@@ -834,6 +858,7 @@ public class MiCloudService : IDisposable
         }
         catch (Exception ex)
         {
+            LastError = $"响应解析/解密失败: {ex.GetType().Name}: {ex.Message}";
             System.Diagnostics.Debug.WriteLine($"[MiCloud] API {path} parse error: {ex.Message}");
             return null;
         }
@@ -858,7 +883,9 @@ public class MiCloudService : IDisposable
         return Convert.ToBase64String(hash);
     }
 
-    /// <summary>RC4 对称加解密</summary>
+    /// <summary>
+    /// RC4 对称加解密 (小米协议要求 RC4-drop1024：丢弃前 1024 字节 keystream)
+    /// </summary>
     private static byte[] Rc4Crypt(byte[] key, byte[] data)
     {
         var s = new byte[256];
@@ -873,6 +900,14 @@ public class MiCloudService : IDisposable
 
         var x = 0;
         var y = 0;
+        // RC4-drop1024: 丢弃前 1024 字节 keystream (hass-xiaomi-miot / micloud / python-miio 一致)
+        for (var skip = 0; skip < 1024; skip++)
+        {
+            x = (x + 1) % 256;
+            y = (y + s[x]) % 256;
+            (s[x], s[y]) = (s[y], s[x]);
+        }
+
         var result = new byte[data.Length];
         for (var k = 0; k < data.Length; k++)
         {
