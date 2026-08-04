@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Timers;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -66,7 +67,7 @@ public class MiHomeComponent : ComponentBase
         {
             RowDefinitions = new RowDefinitions("Auto,*,Auto"),
             Margin = new Thickness(8),
-            MinHeight = 60
+            MinHeight = 220
         };
 
         // === 标题栏 ===
@@ -74,11 +75,22 @@ public class MiHomeComponent : ComponentBase
         Grid.SetRow(titleBar, 0);
         _rootGrid.Children.Add(titleBar);
 
-        // === 设备列表 ===
-        _devicesList = new ItemsControl();
+        // === 设备列表 (用 ScrollViewer 包裹, 设备多时可滚动) ===
+        var scrollViewer = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MinHeight = 120,
+            Padding = new Thickness(0, 2, 0, 2)
+        };
+        _devicesList = new ItemsControl
+        {
+            MinHeight = 100
+        };
         _devicesList.ItemTemplate = BuildDeviceTemplate();
-        Grid.SetRow(_devicesList, 1);
-        _rootGrid.Children.Add(_devicesList);
+        scrollViewer.Content = _devicesList;
+        Grid.SetRow(scrollViewer, 1);
+        _rootGrid.Children.Add(scrollViewer);
 
         // === 状态栏 ===
         _statusText = new TextBlock
@@ -88,7 +100,8 @@ public class MiHomeComponent : ComponentBase
             Foreground = Brush.Parse("#FF9800"),
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(0, 6, 0, 2),
-            TextWrapping = TextWrapping.Wrap
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 18
         };
         Grid.SetRow(_statusText, 2);
         _rootGrid.Children.Add(_statusText);
@@ -327,7 +340,7 @@ public class MiHomeComponent : ComponentBase
             // 先获取设备列表
             if (_cloudDevices == null)
             {
-                var (devices, _) = await _cloudService.GetDeviceListAsync();
+                var (devices, err) = await _cloudService.GetDeviceListAsync();
                 if (devices != null)
                 {
                     _cloudDevices = devices;
@@ -336,21 +349,42 @@ public class MiHomeComponent : ComponentBase
                     {
                         if (_statusText != null)
                         {
-                            _statusText.Text = $"已连接 {devices.Count} 台设备";
-                            _statusText.Foreground = Brush.Parse("#4CAF50");
+                            var onlineCount = devices.Count(d => d.IsOnline);
+                            _statusText.Text = devices.Count == 0
+                                ? "该账号下暂无米家设备"
+                                : $"已连接 {devices.Count} 台设备（{onlineCount} 台在线）";
+                            _statusText.Foreground = devices.Count == 0
+                                ? Brush.Parse("#9E9E9E")
+                                : Brush.Parse("#4CAF50");
                         }
                     });
+                }
+                else
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (_statusText != null)
+                        {
+                            _statusText.Text = string.IsNullOrEmpty(err)
+                                ? "获取设备列表失败"
+                                : $"获取设备列表失败：{err}";
+                            _statusText.Foreground = Brush.Parse("#F44336");
+                        }
+                    });
+                    return;
                 }
             }
 
             // 刷新每个在线设备的状态
             if (_cloudDevices != null)
             {
+                var enabledCount = 0;
                 foreach (var device in _cloudDevices)
                 {
                     if (ct.IsCancellationRequested) break;
                     if (!device.IsOnline) continue;
                     if (!_settings.IsDeviceEnabled(device.Did)) continue;
+                    enabledCount++;
 
                     var status = await _cloudService.GetDeviceStatusAsync(device);
                     if (status == null) continue;
@@ -362,6 +396,19 @@ public class MiHomeComponent : ComponentBase
 
                         if (_refreshTimeText != null)
                             _refreshTimeText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
+                    });
+                }
+
+                // 若没有启用的在线设备, 提示用户去设置里勾选
+                if (enabledCount == 0 && _cloudDevices.Any(d => d.IsOnline))
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (_statusText != null)
+                        {
+                            _statusText.Text = "暂无启用的设备，请在设置中勾选要显示的设备";
+                            _statusText.Foreground = Brush.Parse("#9E9E9E");
+                        }
                     });
                 }
             }
