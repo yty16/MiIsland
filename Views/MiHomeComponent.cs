@@ -161,127 +161,15 @@ public class MiHomeComponent : ComponentBase
 
     private FuncDataTemplate<MiDeviceStatus> BuildDeviceTemplate()
     {
-        return new FuncDataTemplate<MiDeviceStatus>((status, _) =>
-        {
-            var card = new Border
-            {
-                Margin = new Thickness(2),
-                Padding = new Thickness(8, 6),
-                CornerRadius = new CornerRadius(6),
-                Background = Brush.Parse("#1A000000")
-            };
+        return new FuncDataTemplate<MiDeviceStatus>((status, _) => BuildDeviceCard(status));
+    }
 
-            var root = new StackPanel { Spacing = 4 };
-
-            // === 第一行: 状态点 + 名称 + 状态文字 + 右侧控件 ===
-            var top = new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
-                RowDefinitions = new RowDefinitions("Auto,Auto")
-            };
-
-            var dot = new Border
-            {
-                Width = 10, Height = 10,
-                CornerRadius = new CornerRadius(5),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0),
-                Background = Brush.Parse(status.StatusColor)
-            };
-            Grid.SetRowSpan(dot, 2);
-            top.Children.Add(dot);
-
-            var nameText = new TextBlock
-            {
-                Text = status.Name,
-                FontSize = 13,
-                FontWeight = FontWeight.Medium,
-                Foreground = Brush.Parse("#333333")
-            };
-            Grid.SetRow(nameText, 0);
-            Grid.SetColumn(nameText, 1);
-            top.Children.Add(nameText);
-
-            var statusText = new TextBlock
-            {
-                Text = status.Kind == MiDeviceKind.Sensor ? status.SensorText : status.StatusText,
-                FontSize = 11,
-                Foreground = Brush.Parse("#9E9E9E"),
-                Margin = new Thickness(0, 2, 0, 0)
-            };
-            Grid.SetRow(statusText, 1);
-            Grid.SetColumn(statusText, 1);
-            top.Children.Add(statusText);
-
-            // 右侧控件按设备类型渲染
-            if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic)
-            {
-                var toggleBtn = new Button
-                {
-                    Content = status.PowerButtonText,
-                    FontSize = 12,
-                    Width = 56, Height = 30,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Background = Brush.Parse(status.PowerButtonColor),
-                    Foreground = Brush.Parse("#FFFFFF"),
-                    CornerRadius = new CornerRadius(4),
-                    Tag = status.Did
-                };
-                toggleBtn.Click += OnDeviceToggleClick;
-                Grid.SetRowSpan(toggleBtn, 2);
-                Grid.SetColumn(toggleBtn, 2);
-                top.Children.Add(toggleBtn);
-            }
-            else if (status.Kind == MiDeviceKind.Curtain)
-            {
-                var panel = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Spacing = 4,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                foreach (var (label, action) in new[] { ("开", "open"), ("停", "pause"), ("关", "close") })
-                {
-                    var b = new Button
-                    {
-                        Content = label,
-                        FontSize = 11,
-                        Padding = new Thickness(8, 2),
-                        Background = Brush.Parse("#E0E0E0"),
-                        Foreground = Brush.Parse("#333333"),
-                        CornerRadius = new CornerRadius(3),
-                        Tag = $"{status.Did}:{action}"
-                    };
-                    b.Click += OnCurtainClick;
-                    panel.Children.Add(b);
-                }
-                Grid.SetRowSpan(panel, 2);
-                Grid.SetColumn(panel, 2);
-                top.Children.Add(panel);
-            }
-            // Sensor: 只读展示, 无控件
-
-            root.Children.Add(top);
-
-            // === 灯: 亮度滑块 (先设值再挂事件, 避免初始赋值误触发 RPC) ===
-            if (status.Kind == MiDeviceKind.Light)
-            {
-                var slider = new Slider
-                {
-                    Minimum = 0,
-                    Maximum = 100,
-                    Margin = new Thickness(0, 6, 0, 0),
-                    Tag = status.Did
-                };
-                var didLocal = status.Did;
-                slider.Value = Math.Clamp(status.Brightness ?? 50, 0, 100);
-                slider.ValueChanged += (_, _) => ScheduleBrightnessSet(didLocal, slider.Value);
-                root.Children.Add(slider);
-            }
-
-            card.Child = root;
-            return card;
-        });
+    private Control BuildDeviceCard(MiDeviceStatus status)
+    {
+        Action<string> onToggle = did => { _ = ToggleDeviceAsync(did); };
+        Action<string, string> onCurtain = (did, action) => { _ = CurtainDeviceAsync(did, action); };
+        Action<string, double> onBrightness = (did, v) => ScheduleBrightnessSet(did, v);
+        return DeviceCardBuilder.BuildCard(status, onToggle, onCurtain, onBrightness);
     }
 
     // === 自动登录并刷新 ===
@@ -456,58 +344,35 @@ public class MiHomeComponent : ComponentBase
 
     // === 开关 / 亮度 / 窗帘控制 (操作后回查真实状态) ===
 
-    private async void OnDeviceToggleClick(object? sender, RoutedEventArgs e)
+    private async Task ToggleDeviceAsync(string did)
     {
-        if (sender is not Button button || button.Tag is not string did) return;
         var status = _deviceStatuses.FirstOrDefault(d => d.Did == did);
         if (status == null) return;
 
         var newState = !status.IsPoweredOn;
-        button.IsEnabled = false;
-        try
+        var ok = await _cloudService.SetPowerAsync(did, newState);
+        if (ok)
         {
-            var ok = await _cloudService.SetPowerAsync(did, newState);
-            if (ok)
-            {
-                await RequeryDeviceAsync(did);
-                SetStatusText($"已{(newState ? "开启" : "关闭")}：{status.Name}", "#4CAF50");
-            }
-            else
-            {
-                SetStatusText("设备控制失败，请检查网络", "#F44336");
-            }
+            await RequeryDeviceAsync(did);
+            SetStatusText($"已{(newState ? "开启" : "关闭")}：{status.Name}", "#4CAF50");
         }
-        finally
+        else
         {
-            button.IsEnabled = true;
+            SetStatusText("设备控制失败，请检查网络", "#F44336");
         }
     }
 
-    private async void OnCurtainClick(object? sender, RoutedEventArgs e)
+    private async Task CurtainDeviceAsync(string did, string action)
     {
-        if (sender is not Button button || button.Tag is not string tag) return;
-        var parts = tag.Split(':');
-        if (parts.Length != 2) return;
-        var did = parts[0];
-        var action = parts[1];
-
-        button.IsEnabled = false;
-        try
+        var ok = await _cloudService.SetCurtainAsync(did, action);
+        if (ok)
         {
-            var ok = await _cloudService.SetCurtainAsync(did, action);
-            if (ok)
-            {
-                await RequeryDeviceAsync(did);
-                SetStatusText($"窗帘已{action}：{did}", "#4CAF50");
-            }
-            else
-            {
-                SetStatusText("窗帘控制失败", "#F44336");
-            }
+            await RequeryDeviceAsync(did);
+            SetStatusText($"窗帘已{action}：{did}", "#4CAF50");
         }
-        finally
+        else
         {
-            button.IsEnabled = true;
+            SetStatusText("窗帘控制失败", "#F44336");
         }
     }
 

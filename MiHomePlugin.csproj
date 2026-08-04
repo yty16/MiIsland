@@ -19,6 +19,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- 托盘图标 NotifyIcon 需要 WinForms (属于 WindowsDesktop 框架) -->
+        <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Update="manifest.yml">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
