@@ -50,6 +50,17 @@ public partial class SettingsControl : SettingsPageBase
         base.OnInitialized();
         BuildUI();
         UpdateLoginStatus();
+
+        // 已登录则自动加载一次设备列表,避免切回设置页时还停留在「请先登录」占位文案。
+        if (_cloudService.IsLoggedIn)
+        {
+            _deviceCountText!.Text = "正在加载设备列表...";
+            _ = RefreshDeviceListAsync();
+        }
+        else
+        {
+            _deviceCountText!.Text = "请先登录以获取设备列表";
+        }
     }
 
     private void BuildUI()
@@ -273,7 +284,7 @@ public partial class SettingsControl : SettingsPageBase
         };
         _deviceCountText = new TextBlock
         {
-            Text = "请先登录以获取设备列表",
+            Text = "",
             FontSize = 12,
             Foreground = Brush.Parse("#999999"),
             VerticalAlignment = VerticalAlignment.Center
