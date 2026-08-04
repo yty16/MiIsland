@@ -28,9 +28,11 @@ public class PluginSettings
 
     // === 保存/加载 ===
 
-    private static readonly string SettingsDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ClassIsland", "Plugins", "MiIsland");
+    // 存插件目录 (DLL 同目录)，卸载插件时整个目录被删 → 登录状态一并清除，重装后不再自动登录。
+    // 不再写入 AppData，避免卸载插件后凭证残留在系统目录里。
+    private static readonly string SettingsDir = Path.GetDirectoryName(
+        System.Reflection.Assembly.GetExecutingAssembly().Location)
+        ?? AppContext.BaseDirectory;
 
     private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
 
