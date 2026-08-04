@@ -510,6 +510,13 @@ public class MiCloudService : IDisposable
                     // 超时重试
                     continue;
                 }
+                catch (TimeoutException)  // Task.WaitAsync(TimeSpan) 超时（不是 TaskCanceledException）
+                {
+                    if (DateTime.UtcNow - startTime > timeoutSpan)
+                        return (false, "二维码已过期，请重新获取", null);
+                    await Task.Delay(2000, linkedCts.Token);
+                    continue;
+                }
                 catch (HttpRequestException)
                 {
                     await Task.Delay(3000, linkedCts.Token);
@@ -521,9 +528,13 @@ public class MiCloudService : IDisposable
         {
             return (false, "已取消扫码登录", null);
         }
+        catch (TimeoutException)  // 外层兜底：万一有漏网的超时
+        {
+            return (false, "扫码超时，请重新获取", null);
+        }
         catch (Exception ex)
         {
-            return (false, $"轮询异常: {ex.Message}", null);
+            return (false, $"扫码出错: {ex.Message}", null);
         }
     }
 
