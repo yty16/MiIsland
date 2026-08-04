@@ -31,7 +31,6 @@ public partial class SettingsControl : SettingsPageBase
     private Border? _accountInfoCard;
     private TextBlock? _accountLoginTimeText;
     private TextBlock? _accountUserIdText;
-    private TextBlock? _accountNickText;
     private TextBlock? _accountExpireText;
 
     // 扫码登录 UI
@@ -193,13 +192,6 @@ public partial class SettingsControl : SettingsPageBase
             Foreground = Brush.Parse("#555555")
         };
         infoStack.Children.Add(_accountUserIdText);
-
-        _accountNickText = new TextBlock
-        {
-            FontSize = 11,
-            Foreground = Brush.Parse("#555555")
-        };
-        infoStack.Children.Add(_accountNickText);
 
         _accountLoginTimeText = new TextBlock
         {
@@ -561,14 +553,9 @@ public partial class SettingsControl : SettingsPageBase
             _accountInfoCard.IsVisible = true;
 
             if (!string.IsNullOrEmpty(_settings.Account.UserId))
-                _accountUserIdText!.Text = $"账号 ID：{_settings.Account.UserId}（小米云数字 ID，非手机号/昵称）";
+                _accountUserIdText!.Text = $"账号 ID：{_settings.Account.UserId}";
             else
                 _accountUserIdText!.Text = "账号 ID：-";
-
-            if (!string.IsNullOrEmpty(_settings.Account.NickName))
-                _accountNickText!.Text = $"昵称：{_settings.Account.NickName}";
-            else
-                _accountNickText!.Text = "昵称：-（暂未获取）";
 
             if (!string.IsNullOrEmpty(_settings.Account.LoginTime))
             {
@@ -594,7 +581,6 @@ public partial class SettingsControl : SettingsPageBase
         {
             _accountInfoCard.IsVisible = false;
             _accountUserIdText!.Text = "";
-            _accountNickText!.Text = "";
             _accountLoginTimeText!.Text = "";
             _accountExpireText!.Text = "";
         }
