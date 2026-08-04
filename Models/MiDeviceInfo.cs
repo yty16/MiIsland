@@ -87,6 +87,10 @@ public class MiCloudDevice
 
     /// <summary>是否启用该设备</summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>设备类型（按 model 前缀粗分，用于占位图/控件选择；由 GetDeviceListAsync 填充）</summary>
+    [JsonIgnore]
+    public MiDeviceKind Kind { get; set; } = MiDeviceKind.Unknown;
 }
 
 /// <summary>

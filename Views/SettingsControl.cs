@@ -420,23 +420,27 @@ public partial class SettingsControl : SettingsPageBase
 
     private async void OnCreateShortcutClick(ShortcutHelper.MiIslandShortcutKind kind, string? deviceName, string? did)
     {
-        // 设备快捷方式：优先用自定义图标，否则尝试云端自动图标（下载并转 ico）
+        // 设备快捷方式：优先用自定义图标，否则尝试云端自动图标（下载并转 ico），
+        // 都没有则生成类型占位 .ico（不再回退 MiIsland 图标）
         string? iconPath = null;
+        MiDeviceKind deviceKind = MiDeviceKind.Unknown;
         if (kind == ShortcutHelper.MiIslandShortcutKind.Device && !string.IsNullOrEmpty(did))
         {
+            var dev = _loadedDevices?.FirstOrDefault(d => d.Did == did);
+            deviceKind = dev?.Kind ?? MiDeviceKind.Unknown;
+
             var custom = _settings.GetDeviceIcon(did);
             if (!string.IsNullOrEmpty(custom))
                 iconPath = DeviceImageHelper.EnsureIco(custom);
-            else
+            else if (dev != null)
             {
-                var dev = _loadedDevices?.FirstOrDefault(d => d.Did == did);
-                if (dev != null)
-                {
-                    var cloud = await DeviceImageHelper.GetCloudImagePathAsync(dev);
-                    if (!string.IsNullOrEmpty(cloud))
-                        iconPath = DeviceImageHelper.EnsureIco(cloud);
-                }
+                var cloud = await DeviceImageHelper.GetCloudImagePathAsync(dev);
+                if (!string.IsNullOrEmpty(cloud))
+                    iconPath = DeviceImageHelper.EnsureIco(cloud);
             }
+
+            if (string.IsNullOrEmpty(iconPath))
+                iconPath = DeviceImageHelper.EnsurePlaceholderIco(deviceKind, deviceName ?? did);
         }
 
         // 设置页/总控不传 iconPath → 使用 MiIsland 默认图标
@@ -448,9 +452,13 @@ public partial class SettingsControl : SettingsPageBase
         }
 
         var name = Path.GetFileNameWithoutExtension(path);
-        var iconNote = kind == ShortcutHelper.MiIslandShortcutKind.Device && !string.IsNullOrEmpty(iconPath)
-            ? "（已用设备图标）"
-            : "";
+        string iconNote = "";
+        if (kind == ShortcutHelper.MiIslandShortcutKind.Device && !string.IsNullOrEmpty(iconPath))
+        {
+            iconNote = iconPath.Contains("ph_", StringComparison.OrdinalIgnoreCase)
+                ? "（无设备图，已用类型占位图标）"
+                : "（已用设备图标）";
+        }
         NotifyHint($"✓ 已在桌面创建：{name}.lnk{iconNote}", "#4CAF50");
     }
 
@@ -635,12 +643,13 @@ public partial class SettingsControl : SettingsPageBase
             }
             catch
             {
-                row.Children.Add(StatusDot(device.IsOnline));
+                row.Children.Add(DevicePlaceholder(device.Kind));
             }
         }
         else
         {
-            row.Children.Add(StatusDot(device.IsOnline));
+            // 无自定义图：显示类型占位图（不再用 MiIsland 图标 / 状态点）
+            row.Children.Add(DevicePlaceholder(device.Kind));
         }
 
         row.Children.Add(new TextBlock
@@ -723,13 +732,20 @@ public partial class SettingsControl : SettingsPageBase
         return row;
     }
 
-    private static Border StatusDot(bool online) => new()
+    private static Border DevicePlaceholder(MiDeviceKind kind) => new()
     {
-        Width = 8,
-        Height = 8,
-        CornerRadius = new CornerRadius(4),
-        Background = online ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
-        VerticalAlignment = VerticalAlignment.Center
+        Width = 22,
+        Height = 22,
+        CornerRadius = new CornerRadius(5),
+        Background = Brush.Parse(DeviceImageHelper.PlaceholderColor(kind)),
+        VerticalAlignment = VerticalAlignment.Center,
+        Child = new TextBlock
+        {
+            Text = DeviceImageHelper.PlaceholderGlyph(kind),
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        }
     };
 
     /// <summary>选择自定义设备图标：弹文件对话框，存到设置（按 did）。</summary>

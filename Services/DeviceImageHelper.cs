@@ -91,6 +91,74 @@ public static class DeviceImageHelper
         icon.Save(fs);
     }
 
+    // === 类型占位图：设备无云端图、无自定义图时，按类型给不同颜色 + 字形 ===
+
+    /// <summary>类型占位图用的 emoji 字形（Avalonia 在 Windows 上可正确渲染彩色 emoji）。</summary>
+    public static string PlaceholderGlyph(MiDeviceKind kind) => kind switch
+    {
+        MiDeviceKind.Light => "💡",
+        MiDeviceKind.Switch => "🔌",
+        MiDeviceKind.Sensor => "📡",
+        MiDeviceKind.Curtain => "🪟",
+        _ => "❓"
+    };
+
+    /// <summary>类型占位图用的主题色（十六进制）。</summary>
+    public static string PlaceholderColor(MiDeviceKind kind) => kind switch
+    {
+        MiDeviceKind.Light => "#FFB300",
+        MiDeviceKind.Switch => "#2196F3",
+        MiDeviceKind.Sensor => "#009688",
+        MiDeviceKind.Curtain => "#9C27B0",
+        _ => "#757575"
+    };
+
+    /// <summary>类型占位图在 .lnk 图标上绘制的字母（System.Drawing 绘制字母比 emoji 可靠）。</summary>
+    public static char PlaceholderLetter(MiDeviceKind kind) => kind switch
+    {
+        MiDeviceKind.Light => 'L',
+        MiDeviceKind.Switch => 'S',
+        MiDeviceKind.Sensor => 'R',
+        MiDeviceKind.Curtain => 'C',
+        _ => '?'
+    };
+
+    /// <summary>生成类型占位 .ico（供无图设备的桌面快捷方式使用），按类型缓存；失败返回 null。</summary>
+    public static string? EnsurePlaceholderIco(MiDeviceKind kind, string? name)
+    {
+        try
+        {
+            var safe = Sanitize(name ?? kind.ToString());
+            var icoPath = Path.Combine(CacheDir, $"ph_{kind}_{safe}.ico");
+            if (File.Exists(icoPath)) return icoPath;
+            DrawPlaceholderIco(kind, icoPath);
+            return File.Exists(icoPath) ? icoPath : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void DrawPlaceholderIco(MiDeviceKind kind, string dst)
+    {
+        using var bmp = new Bitmap(48, 48);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.Transparent);
+            using var brush = new SolidBrush(ColorTranslator.FromHtml(PlaceholderColor(kind)));
+            g.FillRectangle(brush, 4, 4, 40, 40);
+            using var f = new Font("Segoe UI", 22, FontStyle.Bold);
+            var s = PlaceholderLetter(kind).ToString();
+            var sz = g.MeasureString(s, f);
+            using var sb = new SolidBrush(Color.White);
+            g.DrawString(s, f, sb, (48 - sz.Width) / 2, (48 - sz.Height) / 2);
+        }
+        using var icon = Icon.FromHandle(bmp.GetHicon());
+        using var fs = File.Create(dst);
+        icon.Save(fs);
+    }
+
     private static string Sanitize(string s)
     {
         var sb = new System.Text.StringBuilder();

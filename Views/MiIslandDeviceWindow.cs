@@ -36,6 +36,7 @@ public class MiIslandDeviceWindow : Window
     private TextBlock _statusText = null!;
     private Button _refreshButton = null!;
     private Image _iconImage = null!;
+    private Border _iconPlaceholder = null!;
 
     private static readonly Dictionary<string, MiIslandDeviceWindow> Instances = new();
 
@@ -98,6 +99,18 @@ public class MiIslandDeviceWindow : Window
         };
         Grid.SetColumn(_iconImage, 0);
         header.Children.Add(_iconImage);
+
+        // 无图时的类型占位图（彩色圆角块 + emoji）
+        _iconPlaceholder = new Border
+        {
+            Width = 30, Height = 30,
+            CornerRadius = new CornerRadius(7),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            IsVisible = false
+        };
+        Grid.SetColumn(_iconPlaceholder, 0);
+        header.Children.Add(_iconPlaceholder);
         header.Children.Add(new TextBlock
         {
             Text = "MiIsland 单设备控制",
@@ -202,18 +215,48 @@ public class MiIslandDeviceWindow : Window
         if (_device == null) return;
         var path = _settings.GetDeviceIcon(_did)
                 ?? await DeviceImageHelper.GetCloudImagePathAsync(_device);
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        {
+            try
+            {
+                var p = path;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    _iconImage.Source = new Bitmap(p);
+                    _iconImage.IsVisible = true;
+                    _iconPlaceholder.IsVisible = false;
+                });
+                return;
+            }
+            catch
+            {
+                // 落到占位图
+            }
+        }
+
+        // 无图：显示类型占位图
         try
         {
+            var kind = _device.Kind;
+            var color = DeviceImageHelper.PlaceholderColor(kind);
+            var glyph = DeviceImageHelper.PlaceholderGlyph(kind);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _iconImage.Source = new Bitmap(path);
-                _iconImage.IsVisible = true;
+                _iconImage.IsVisible = false;
+                _iconPlaceholder.Background = Brush.Parse(color);
+                _iconPlaceholder.Child = new TextBlock
+                {
+                    Text = glyph,
+                    FontSize = 16,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                _iconPlaceholder.IsVisible = true;
             });
         }
         catch
         {
-            // 图标加载失败不影响控制功能
+            // 占位图也失败则留空
         }
     }
 

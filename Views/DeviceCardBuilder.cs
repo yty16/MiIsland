@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using MiIsland.Models;
+using MiIsland.Services;
 
 namespace MiIsland.Views;
 
@@ -62,16 +63,24 @@ public static class DeviceCardBuilder
         }
         if (!hasImage)
         {
-            var dot = new Border
+            // 类型占位图：按设备类型给不同颜色 + emoji 字形，不再回退 MiIsland 图标
+            var placeholder = new Border
             {
-                Width = 10, Height = 10,
-                CornerRadius = new CornerRadius(5),
+                Width = 34, Height = 34,
+                CornerRadius = new CornerRadius(8),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 10, 0),
-                Background = Brush.Parse(status.StatusColor)
+                Background = Brush.Parse(DeviceImageHelper.PlaceholderColor(status.Kind)),
+                Child = new TextBlock
+                {
+                    Text = DeviceImageHelper.PlaceholderGlyph(status.Kind),
+                    FontSize = 18,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
             };
-            Grid.SetRowSpan(dot, 2);
-            top.Children.Add(dot);
+            Grid.SetRowSpan(placeholder, 2);
+            top.Children.Add(placeholder);
         }
 
         var nameText = new TextBlock

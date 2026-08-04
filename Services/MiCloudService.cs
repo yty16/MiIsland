@@ -169,6 +169,11 @@ public class MiCloudService : IDisposable
             resObj.TryGetProperty("list", out var list))
         {
             var devices = JsonSerializer.Deserialize<List<MiCloudDevice>>(list.GetRawText());
+            if (devices != null)
+            {
+                foreach (var d in devices)
+                    d.Kind = ClassifyDevice(d);
+            }
             return (devices, null);
         }
 
