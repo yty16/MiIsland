@@ -773,12 +773,12 @@ public class MiCloudService : IDisposable
         var signedNonce = SignNonce(nonce);
         var key = Convert.FromBase64String(signedNonce);
 
-        // 1) 原始 params，先计算 rc4_hash（保持固定顺序：data, rc4_hash）
+        // 1) 原始 params，先计算 rc4_hash__ (双下划线 - hass-xiaomi-miot master 实际用法)
         var rawParams = new List<KeyValuePair<string, string>>
         {
             new("data", dataJson)
         };
-        rawParams.Add(new KeyValuePair<string, string>("rc4_hash",
+        rawParams.Add(new KeyValuePair<string, string>("rc4_hash__",
             GenerateCloudSignature(url, signedNonce, rawParams)));
 
         // 2) RC4 加密所有值（signature 稍后加，不参与加密）
