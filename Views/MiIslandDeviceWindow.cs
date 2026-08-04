@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using MiIsland.Models;
 using MiIsland.Services;
@@ -34,6 +35,7 @@ public class MiIslandDeviceWindow : Window
     private StackPanel _cardHost = null!;
     private TextBlock _statusText = null!;
     private Button _refreshButton = null!;
+    private Image _iconImage = null!;
 
     private static readonly Dictionary<string, MiIslandDeviceWindow> Instances = new();
 
@@ -83,9 +85,19 @@ public class MiIslandDeviceWindow : Window
         // 标题栏
         var header = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             Margin = new Thickness(0, 0, 0, 8)
         };
+        _iconImage = new Image
+        {
+            Width = 30, Height = 30,
+            Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            IsVisible = false
+        };
+        Grid.SetColumn(_iconImage, 0);
+        header.Children.Add(_iconImage);
         header.Children.Add(new TextBlock
         {
             Text = "MiIsland 单设备控制",
@@ -94,6 +106,7 @@ public class MiIslandDeviceWindow : Window
             Foreground = Brush.Parse("#333333"),
             VerticalAlignment = VerticalAlignment.Center
         });
+        Grid.SetColumn(header.Children[header.Children.Count - 1], 1);
         _refreshButton = new Button
         {
             Content = "刷新",
@@ -103,7 +116,7 @@ public class MiIslandDeviceWindow : Window
             CornerRadius = new CornerRadius(4)
         };
         _refreshButton.Click += OnRefreshClick;
-        Grid.SetColumn(_refreshButton, 1);
+        Grid.SetColumn(_refreshButton, 2);
         header.Children.Add(_refreshButton);
         Grid.SetRow(header, 0);
         root.Children.Add(header);
@@ -173,6 +186,8 @@ public class MiIslandDeviceWindow : Window
 
         Title = $"MiIsland · {_device.Name}";
 
+        await LoadDeviceIconAsync();
+
         if (_settings.RefreshIntervalSeconds > 0)
         {
             _refreshTimer = new Timer(_settings.RefreshIntervalSeconds * 1000) { AutoReset = true };
@@ -180,6 +195,26 @@ public class MiIslandDeviceWindow : Window
         }
 
         await RefreshStatusAsync();
+    }
+
+    private async Task LoadDeviceIconAsync()
+    {
+        if (_device == null) return;
+        var path = _settings.GetDeviceIcon(_did)
+                ?? await DeviceImageHelper.GetCloudImagePathAsync(_device);
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _iconImage.Source = new Bitmap(path);
+                _iconImage.IsVisible = true;
+            });
+        }
+        catch
+        {
+            // 图标加载失败不影响控制功能
+        }
     }
 
     private async Task RefreshStatusAsync()

@@ -65,6 +65,14 @@ public class MiCloudDevice
     [JsonPropertyName("model")]
     public string Model { get; set; } = "";
 
+    /// <summary>云端返回的设备图标 URL（自动图标来源；部分型号不返回则为空）</summary>
+    [JsonPropertyName("icon")]
+    public string IconUrl { get; set; } = "";
+
+    /// <summary>云端返回的设备图标备用字段</summary>
+    [JsonPropertyName("deviceIcon")]
+    public string DeviceIconUrl { get; set; } = "";
+
     /// <summary>设备类型标识</summary>
     [JsonPropertyName("token")]
     public string Token { get; set; } = "";
@@ -108,6 +116,8 @@ public class MiDeviceStatus
     public string Did { get; set; } = "";
     public string Model { get; set; } = "";
     public MiDeviceKind Kind { get; set; } = MiDeviceKind.Unknown;
+    /// <summary>设备展示用图标本地路径（自定义图片优先，其次云端自动图标）；为空则回退状态点</summary>
+    public string? IconPath { get; set; }
     public bool IsOnline { get; set; }
     public bool IsPoweredOn { get; set; }
     public int? Brightness { get; set; }

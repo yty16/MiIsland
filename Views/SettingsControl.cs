@@ -26,6 +26,7 @@ public partial class SettingsControl : SettingsPageBase
     private TextBlock? _deviceCountText;
     private TextBox? _refreshIntervalBox;
     private ItemsControl? _deviceListControl;
+    private List<MiCloudDevice>? _loadedDevices;
 
     // 快捷方式创建反馈
     private TextBlock? _shortcutHint;
@@ -314,7 +315,7 @@ public partial class SettingsControl : SettingsPageBase
         _deviceListControl = new ItemsControl
         {
             Margin = new Thickness(0, 4, 0, 0),
-            ItemTemplate = new FuncDataTemplate<MiCloudDevice>((device, _) => BuildDeviceRow(device, _shortcutHint))
+            ItemTemplate = new FuncDataTemplate<MiCloudDevice>((device, _) => BuildDeviceRow(device))
         };
         section.Children.Add(_deviceListControl);
 
@@ -387,7 +388,7 @@ public partial class SettingsControl : SettingsPageBase
             CornerRadius = new CornerRadius(3)
         };
         settingsBtn.Click += (_, _) => OnCreateShortcutClick(
-            ShortcutHelper.MiIslandShortcutKind.Settings, null, null, _shortcutHint);
+            ShortcutHelper.MiIslandShortcutKind.Settings, null, null);
         buttonRow.Children.Add(settingsBtn);
 
         var controlBtn = new Button
@@ -399,7 +400,7 @@ public partial class SettingsControl : SettingsPageBase
             CornerRadius = new CornerRadius(3)
         };
         controlBtn.Click += (_, _) => OnCreateShortcutClick(
-            ShortcutHelper.MiIslandShortcutKind.Control, null, null, _shortcutHint);
+            ShortcutHelper.MiIslandShortcutKind.Control, null, null);
         buttonRow.Children.Add(controlBtn);
 
         section.Children.Add(buttonRow);
@@ -417,22 +418,40 @@ public partial class SettingsControl : SettingsPageBase
         return section;
     }
 
-    private static void OnCreateShortcutClick(ShortcutHelper.MiIslandShortcutKind kind, string? deviceName, string? did, TextBlock? hint)
+    private async void OnCreateShortcutClick(ShortcutHelper.MiIslandShortcutKind kind, string? deviceName, string? did)
     {
-        var path = ShortcutHelper.CreateMiIslandShortcut(kind, deviceName, did);
-        if (hint == null) return;
+        // 设备快捷方式：优先用自定义图标，否则尝试云端自动图标（下载并转 ico）
+        string? iconPath = null;
+        if (kind == ShortcutHelper.MiIslandShortcutKind.Device && !string.IsNullOrEmpty(did))
+        {
+            var custom = _settings.GetDeviceIcon(did);
+            if (!string.IsNullOrEmpty(custom))
+                iconPath = DeviceImageHelper.EnsureIco(custom);
+            else
+            {
+                var dev = _loadedDevices?.FirstOrDefault(d => d.Did == did);
+                if (dev != null)
+                {
+                    var cloud = await DeviceImageHelper.GetCloudImagePathAsync(dev);
+                    if (!string.IsNullOrEmpty(cloud))
+                        iconPath = DeviceImageHelper.EnsureIco(cloud);
+                }
+            }
+        }
 
+        // 设置页/总控不传 iconPath → 使用 MiIsland 默认图标
+        var path = ShortcutHelper.CreateMiIslandShortcut(kind, deviceName, did, iconPath);
         if (path == null)
         {
-            hint.Text = "创建失败：无法写入桌面（请检查权限或 ClassIsland 路径）。";
-            hint.Foreground = Brush.Parse("#F44336");
+            NotifyHint("创建失败：无法写入桌面（请检查权限或 ClassIsland 路径）。", "#F44336");
+            return;
         }
-        else
-        {
-            var name = Path.GetFileNameWithoutExtension(path);
-            hint.Text = $"✓ 已在桌面创建：{name}.lnk";
-            hint.Foreground = Brush.Parse("#4CAF50");
-        }
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        var iconNote = kind == ShortcutHelper.MiIslandShortcutKind.Device && !string.IsNullOrEmpty(iconPath)
+            ? "（已用设备图标）"
+            : "";
+        NotifyHint($"✓ 已在桌面创建：{name}.lnk{iconNote}", "#4CAF50");
     }
 
     // === 事件处理 ===
@@ -568,11 +587,12 @@ public partial class SettingsControl : SettingsPageBase
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (devices != null)
-                {
-                    _deviceCountText.Text = $"共 {devices.Count} 台设备";
-                    _deviceListControl!.ItemsSource = devices;
-                }
+            if (devices != null)
+            {
+                _loadedDevices = devices;
+                _deviceCountText.Text = $"共 {devices.Count} 台设备";
+                _deviceListControl!.ItemsSource = devices;
+            }
                 else
                 {
                     _deviceCountText.Text = $"✗ {error ?? "加载失败"}";
@@ -589,8 +609,8 @@ public partial class SettingsControl : SettingsPageBase
         }
     }
 
-    /// <summary>单个设备行 (绿点 + 名称 + 型号 + 在线状态 + 快捷方式按钮)，供 ItemsControl.ItemTemplate 使用</summary>
-    private static Control BuildDeviceRow(MiCloudDevice device, TextBlock? shortcutHint)
+    /// <summary>单个设备行 (图标 + 名称 + 型号 + 在线状态 + 图标选择/快捷方式按钮)，供 ItemsControl.ItemTemplate 使用</summary>
+    private Control BuildDeviceRow(MiCloudDevice device)
     {
         var row = new StackPanel
         {
@@ -599,21 +619,36 @@ public partial class SettingsControl : SettingsPageBase
             Margin = new Thickness(0, 2)
         };
 
-        row.Children.Add(new Border
+        // 设备图标（自定义优先；其次云端自动图，列表渲染时不做网络下载，仅显示已设置的自定义图）
+        var customIcon = _settings.GetDeviceIcon(device.Did);
+        if (!string.IsNullOrEmpty(customIcon) && File.Exists(customIcon))
         {
-            Width = 8,
-            Height = 8,
-            CornerRadius = new CornerRadius(4),
-            Background = device.IsOnline ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
-            VerticalAlignment = VerticalAlignment.Center
-        });
+            try
+            {
+                row.Children.Add(new Image
+                {
+                    Source = new Bitmap(customIcon),
+                    Width = 22, Height = 22,
+                    Stretch = Stretch.Uniform,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+            }
+            catch
+            {
+                row.Children.Add(StatusDot(device.IsOnline));
+            }
+        }
+        else
+        {
+            row.Children.Add(StatusDot(device.IsOnline));
+        }
 
         row.Children.Add(new TextBlock
         {
             Text = device.Name,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Width = 140
+            Width = 130
         });
 
         row.Children.Add(new TextBlock
@@ -622,7 +657,7 @@ public partial class SettingsControl : SettingsPageBase
             FontSize = 10,
             Foreground = Brush.Parse("#999999"),
             VerticalAlignment = VerticalAlignment.Center,
-            Width = 120
+            Width = 110
         });
 
         row.Children.Add(new TextBlock
@@ -632,6 +667,43 @@ public partial class SettingsControl : SettingsPageBase
             Foreground = device.IsOnline ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
             VerticalAlignment = VerticalAlignment.Center
         });
+
+        // 选择自定义图标
+        var iconBtn = new Button
+        {
+            Content = "图标",
+            FontSize = 10,
+            Padding = new Thickness(8, 1),
+            Background = Brush.Parse("#EEEEEE"),
+            Foreground = Brush.Parse("#555555"),
+            CornerRadius = new CornerRadius(3),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        iconBtn.Click += async (_, _) => await PickCustomIconAsync(device);
+        row.Children.Add(iconBtn);
+
+        // 清除自定义图标（仅当已设置时显示）
+        if (!string.IsNullOrEmpty(customIcon))
+        {
+            var clearBtn = new Button
+            {
+                Content = "清除图标",
+                FontSize = 10,
+                Padding = new Thickness(8, 1),
+                Background = Brush.Parse("#FFEBEE"),
+                Foreground = Brush.Parse("#C62828"),
+                CornerRadius = new CornerRadius(3),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            clearBtn.Click += (_, _) =>
+            {
+                _settings.ClearDeviceIcon(device.Did);
+                _settings.Save();
+                NotifyHint($"已清除「{device.Name}」的自定义图标", "#9E9E9E");
+                _ = RefreshDeviceListAsync();
+            };
+            row.Children.Add(clearBtn);
+        }
 
         // 单设备快捷方式按钮
         var shortcutBtn = new Button
@@ -645,10 +717,67 @@ public partial class SettingsControl : SettingsPageBase
             VerticalAlignment = VerticalAlignment.Center
         };
         shortcutBtn.Click += (_, _) => OnCreateShortcutClick(
-            ShortcutHelper.MiIslandShortcutKind.Device, device.Name, device.Did, shortcutHint);
+            ShortcutHelper.MiIslandShortcutKind.Device, device.Name, device.Did);
         row.Children.Add(shortcutBtn);
 
         return row;
+    }
+
+    private static Border StatusDot(bool online) => new()
+    {
+        Width = 8,
+        Height = 8,
+        CornerRadius = new CornerRadius(4),
+        Background = online ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
+        VerticalAlignment = VerticalAlignment.Center
+    };
+
+    /// <summary>选择自定义设备图标：弹文件对话框，存到设置（按 did）。</summary>
+    private async Task PickCustomIconAsync(MiCloudDevice device)
+    {
+        try
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = $"为「{device.Name}」选择图标",
+                AllowMultiple = false,
+                Filters =
+                {
+                    new FileDialogFilter
+                    {
+                        Name = "图片",
+                        Extensions = { "png", "jpg", "jpeg", "bmp", "webp", "gif" }
+                    }
+                }
+            };
+            var top = TopLevel.GetTopLevel(this) as Window;
+            if (top == null)
+            {
+                NotifyHint("无法打开文件选择框（未找到父窗口）", "#F44336");
+                return;
+            }
+            var files = await dialog.ShowAsync(top);
+            if (files == null || files.Length == 0) return;
+
+            var path = files[0];
+            if (!File.Exists(path)) return;
+
+            _settings.SetDeviceIcon(device.Did, path);
+            _settings.Save();
+            NotifyHint($"已为「{device.Name}」设置自定义图标", "#4CAF50");
+            await RefreshDeviceListAsync();
+        }
+        catch (Exception ex)
+        {
+            NotifyHint($"选择图标失败：{ex.Message}", "#F44336");
+        }
+    }
+
+    private void NotifyHint(string text, string color)
+    {
+        if (_shortcutHint == null) return;
+        _shortcutHint.Text = text;
+        _shortcutHint.Foreground = Brush.Parse(color);
     }
 
     private void UpdateLoginStatus()

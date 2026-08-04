@@ -201,6 +201,7 @@ public class MiIslandControlWindow : Window
             }
 
             var enabled = 0;
+            var iconPairs = new System.Collections.Generic.List<(MiDeviceStatus, MiCloudDevice)>();
             foreach (var device in _cloudDevices)
             {
                 if (ct.IsCancellationRequested) break;
@@ -211,9 +212,17 @@ public class MiIslandControlWindow : Window
                 var status = await _cloudService.GetDeviceStatusAsync(device);
                 if (status == null) continue;
 
+                // 自定义图标即时生效；云端图标稍后并行补齐
+                status.IconPath = _settings.GetDeviceIcon(device.Did);
+                iconPairs.Add((status, device));
+
                 Upsert(status);
                 await Dispatcher.UIThread.InvokeAsync(RefreshUi);
             }
+
+            // 并行补齐云端设备图标，完成后整列重绘一次
+            if (iconPairs.Count > 0)
+                await ResolveCloudIconsAsync(iconPairs);
 
             if (enabled == 0 && _cloudDevices.Any(d => d.IsOnline))
             {
@@ -327,11 +336,29 @@ public class MiIslandControlWindow : Window
         var newStatus = await _cloudService.GetDeviceStatusAsync(device);
         if (newStatus == null) return;
 
+        // 恢复图标（自定义优先；云端图已缓存时即时返回）
+        newStatus.IconPath = _settings.GetDeviceIcon(did)
+                          ?? await DeviceImageHelper.GetCloudImagePathAsync(device);
+
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             Upsert(newStatus);
             RefreshUi();
         });
+    }
+
+    /// <summary>并行补齐云端设备图标；完成后整列重绘一次。</summary>
+    private async Task ResolveCloudIconsAsync(
+        System.Collections.Generic.List<(MiDeviceStatus status, MiCloudDevice device)> pairs)
+    {
+        await System.Threading.Tasks.Task.WhenAll(pairs.Select(async p =>
+        {
+            if (!string.IsNullOrEmpty(p.status.IconPath)) return;
+            var path = await DeviceImageHelper.GetCloudImagePathAsync(p.device);
+            if (!string.IsNullOrEmpty(path))
+                p.status.IconPath = path;
+        }));
+        await Dispatcher.UIThread.InvokeAsync(RefreshUi);
     }
 
     // === 关闭行为: 仅隐藏, 由托盘再次打开 ===

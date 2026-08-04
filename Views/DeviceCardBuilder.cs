@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using MiIsland.Models;
 
 namespace MiIsland.Views;
@@ -29,23 +30,49 @@ public static class DeviceCardBuilder
 
         var root = new StackPanel { Spacing = 4 };
 
-        // === 第一行: 状态点 + 名称 + 状态文字 + 右侧控件 ===
+        // === 第一行: 设备图标/状态点 + 名称 + 状态文字 + 右侧控件 ===
         var top = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             RowDefinitions = new RowDefinitions("Auto,Auto")
         };
 
-        var dot = new Border
+        // 左侧：自定义/云端设备图片优先；无图时回退状态点
+        var hasImage = !string.IsNullOrEmpty(status.IconPath) && File.Exists(status.IconPath);
+        if (hasImage)
         {
-            Width = 10, Height = 10,
-            CornerRadius = new CornerRadius(5),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
-            Background = Brush.Parse(status.StatusColor)
-        };
-        Grid.SetRowSpan(dot, 2);
-        top.Children.Add(dot);
+            try
+            {
+                var img = new Image
+                {
+                    Source = new Bitmap(status.IconPath!),
+                    Width = 34, Height = 34,
+                    Stretch = Stretch.Uniform,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 10, 0),
+                    Clip = new RectangleGeometry(new Rect(0, 0, 34, 34), 6, 6)
+                };
+                Grid.SetRowSpan(img, 2);
+                top.Children.Add(img);
+            }
+            catch
+            {
+                hasImage = false;
+            }
+        }
+        if (!hasImage)
+        {
+            var dot = new Border
+            {
+                Width = 10, Height = 10,
+                CornerRadius = new CornerRadius(5),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0),
+                Background = Brush.Parse(status.StatusColor)
+            };
+            Grid.SetRowSpan(dot, 2);
+            top.Children.Add(dot);
+        }
 
         var nameText = new TextBlock
         {

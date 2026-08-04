@@ -26,6 +26,9 @@ public class PluginSettings
     /// <summary>禁用设备的did列表</summary>
     public HashSet<string> DisabledDevices { get; set; } = new();
 
+    /// <summary>每个设备的自定义图标（did -> 本地图片绝对路径），覆盖云端自动图标</summary>
+    public Dictionary<string, string> DeviceIcons { get; set; } = new();
+
     // === 保存/加载 ===
 
     // 存插件目录 (DLL 同目录)，卸载插件时整个目录被删 → 登录状态一并清除，重装后不再自动登录。
@@ -99,4 +102,14 @@ public class PluginSettings
         else
             DisabledDevices.Add(did);
     }
+
+    /// <summary>获取某设备的自定义图标本地路径（不存在或文件已失效则返回 null）</summary>
+    public string? GetDeviceIcon(string did)
+        => DeviceIcons.TryGetValue(did, out var p) && File.Exists(p) ? p : null;
+
+    /// <summary>设置某设备的自定义图标（覆盖云端自动图标）；不自动保存，调用方按需 Save()</summary>
+    public void SetDeviceIcon(string did, string path) => DeviceIcons[did] = path;
+
+    /// <summary>清除某设备的自定义图标；不自动保存，调用方按需 Save()</summary>
+    public void ClearDeviceIcon(string did) => DeviceIcons.Remove(did);
 }

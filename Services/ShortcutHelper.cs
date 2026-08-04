@@ -76,7 +76,9 @@ public static class ShortcutHelper
     /// 在桌面创建指向指定 MiIsland 页面的快捷方式。
     /// 成功返回快捷方式完整路径；失败/不支持时返回 null。
     /// </summary>
-    public static string? CreateMiIslandShortcut(MiIslandShortcutKind kind, string? deviceName, string? did)
+    /// <param name="iconPath">自定义图标路径（.ico 或其它图片）。为 null 时使用 MiIsland 默认图标（设置页/总控）。</param>
+    public static string? CreateMiIslandShortcut(MiIslandShortcutKind kind, string? deviceName, string? did,
+        string? iconPath = null)
     {
         try
         {
@@ -112,7 +114,10 @@ public static class ShortcutHelper
                 i++;
             }
 
-            var icon = GetShortcutIcon() ?? host;
+            // 设备快捷方式优先用设备图片；设置页/总控始终用 MiIsland 默认图标
+            var icon = (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+                ? iconPath
+                : (GetShortcutIcon() ?? host);
             CreateShortcut(lnkPath, host, $"--uri \"{uri}\"",
                 Path.GetDirectoryName(host), label, icon, 0);
             return lnkPath;
