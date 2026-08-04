@@ -44,6 +44,8 @@ public class MiHomeComponent : ComponentBase
         _settings = PluginSettings.Load();
         this.Unloaded += OnComponentUnloaded;
         MiCloudService.LoginStateChanged += OnLoginStateChanged;
+        // 宿主构建完成后注册 MiIsland 的 Uri 导航（快捷方式入口）。幂等。
+        UriNavBridge.EnsureRegistered();
     }
 
     protected override void OnInitialized()

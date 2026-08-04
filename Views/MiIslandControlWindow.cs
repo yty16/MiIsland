@@ -36,6 +36,30 @@ public class MiIslandControlWindow : Window
 
     private bool _forceClose;
 
+    // 单例：系统托盘与 Uri 导航共用同一个总控窗口实例。
+    private static MiIslandControlWindow? _instance;
+
+    /// <summary>显示/激活设备总控窗口（系统托盘与 classisland://plugins/MiIsland/control 共用）。</summary>
+    public static void ShowControlWindow()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_instance == null)
+            {
+                _instance = new MiIslandControlWindow();
+                _instance.Closed += (_, _) => { _instance = null; };
+            }
+            _instance.Show();
+            _instance.Activate();
+        });
+    }
+
+    /// <summary>强制关闭总控窗口（退出托盘时调用）。</summary>
+    public static void CloseInstance()
+    {
+        Dispatcher.UIThread.Post(() => _instance?.RequestClose());
+    }
+
     public MiIslandControlWindow()
     {
         _settings = PluginSettings.Load();

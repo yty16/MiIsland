@@ -27,6 +27,9 @@ public partial class SettingsControl : SettingsPageBase
     private TextBox? _refreshIntervalBox;
     private ItemsControl? _deviceListControl;
 
+    // 快捷方式创建反馈
+    private TextBlock? _shortcutHint;
+
     // 已登录信息卡片
     private Border? _accountInfoCard;
     private TextBlock? _accountLoginTimeText;
@@ -43,6 +46,8 @@ public partial class SettingsControl : SettingsPageBase
     {
         _settings = PluginSettings.Load();
         this.Unloaded += OnPageUnloaded;
+        // 宿主构建完成后注册 MiIsland 的 Uri 导航（快捷方式入口）。幂等。
+        UriNavBridge.EnsureRegistered();
     }
 
     protected override void OnInitialized()
@@ -94,6 +99,9 @@ public partial class SettingsControl : SettingsPageBase
 
         // === 刷新间隔 ===
         rootPanel.Children.Add(BuildRefreshSection());
+
+        // === 桌面快捷方式 ===
+        rootPanel.Children.Add(BuildShortcutSection());
 
         // === 合规提示（可见免责声明） ===
         rootPanel.Children.Add(new Border
@@ -306,7 +314,7 @@ public partial class SettingsControl : SettingsPageBase
         _deviceListControl = new ItemsControl
         {
             Margin = new Thickness(0, 4, 0, 0),
-            ItemTemplate = new FuncDataTemplate<MiCloudDevice>((device, _) => BuildDeviceRow(device))
+            ItemTemplate = new FuncDataTemplate<MiCloudDevice>((device, _) => BuildDeviceRow(device, _shortcutHint))
         };
         section.Children.Add(_deviceListControl);
 
@@ -347,6 +355,84 @@ public partial class SettingsControl : SettingsPageBase
         section.Children.Add(row);
 
         return section;
+    }
+
+    private StackPanel BuildShortcutSection()
+    {
+        var section = new StackPanel { Spacing = 6 };
+
+        section.Children.Add(BuildSectionHeader("桌面快捷方式"));
+
+        section.Children.Add(new TextBlock
+        {
+            Text = "在桌面生成 .lnk 快捷方式，双击即可直达对应页面（需 ClassIsland 正在运行）。系统托盘图标同样直达设备总控页。",
+            FontSize = 11,
+            Foreground = Brush.Parse("#999999"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+
+        var buttonRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8
+        };
+
+        var settingsBtn = new Button
+        {
+            Content = "设置页快捷方式",
+            FontSize = 11,
+            Padding = new Thickness(10, 4),
+            Background = Brush.Parse("#E0E0E0"),
+            CornerRadius = new CornerRadius(3)
+        };
+        settingsBtn.Click += (_, _) => OnCreateShortcutClick(
+            ShortcutHelper.MiIslandShortcutKind.Settings, null, null, _shortcutHint);
+        buttonRow.Children.Add(settingsBtn);
+
+        var controlBtn = new Button
+        {
+            Content = "设备总控快捷方式",
+            FontSize = 11,
+            Padding = new Thickness(10, 4),
+            Background = Brush.Parse("#E0E0E0"),
+            CornerRadius = new CornerRadius(3)
+        };
+        controlBtn.Click += (_, _) => OnCreateShortcutClick(
+            ShortcutHelper.MiIslandShortcutKind.Control, null, null, _shortcutHint);
+        buttonRow.Children.Add(controlBtn);
+
+        section.Children.Add(buttonRow);
+
+        _shortcutHint = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = Brush.Parse("#9E9E9E"),
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 16,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        section.Children.Add(_shortcutHint);
+
+        return section;
+    }
+
+    private static void OnCreateShortcutClick(ShortcutHelper.MiIslandShortcutKind kind, string? deviceName, string? did, TextBlock? hint)
+    {
+        var path = ShortcutHelper.CreateMiIslandShortcut(kind, deviceName, did);
+        if (hint == null) return;
+
+        if (path == null)
+        {
+            hint.Text = "创建失败：无法写入桌面（请检查权限或 ClassIsland 路径）。";
+            hint.Foreground = Brush.Parse("#F44336");
+        }
+        else
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            hint.Text = $"✓ 已在桌面创建：{name}.lnk";
+            hint.Foreground = Brush.Parse("#4CAF50");
+        }
     }
 
     // === 事件处理 ===
@@ -503,8 +589,8 @@ public partial class SettingsControl : SettingsPageBase
         }
     }
 
-    /// <summary>单个设备行 (绿点 + 名称 + 型号 + 在线状态)，供 ItemsControl.ItemTemplate 使用</summary>
-    private static Control BuildDeviceRow(MiCloudDevice device)
+    /// <summary>单个设备行 (绿点 + 名称 + 型号 + 在线状态 + 快捷方式按钮)，供 ItemsControl.ItemTemplate 使用</summary>
+    private static Control BuildDeviceRow(MiCloudDevice device, TextBlock? shortcutHint)
     {
         var row = new StackPanel
         {
@@ -546,6 +632,21 @@ public partial class SettingsControl : SettingsPageBase
             Foreground = device.IsOnline ? Brush.Parse("#4CAF50") : Brush.Parse("#9E9E9E"),
             VerticalAlignment = VerticalAlignment.Center
         });
+
+        // 单设备快捷方式按钮
+        var shortcutBtn = new Button
+        {
+            Content = "快捷方式",
+            FontSize = 10,
+            Padding = new Thickness(8, 1),
+            Background = Brush.Parse("#EEEEEE"),
+            Foreground = Brush.Parse("#555555"),
+            CornerRadius = new CornerRadius(3),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        shortcutBtn.Click += (_, _) => OnCreateShortcutClick(
+            ShortcutHelper.MiIslandShortcutKind.Device, device.Name, device.Did, shortcutHint);
+        row.Children.Add(shortcutBtn);
 
         return row;
     }

@@ -18,7 +18,6 @@ public class TrayIconManager
 
     private NotifyIcon? _notifyIcon;
     private Icon? _icon;
-    private MiIslandControlWindow? _window;
 
     public void Start()
     {
@@ -47,25 +46,12 @@ public class TrayIconManager
 
     private void ShowWindow()
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_window == null)
-            {
-                _window = new MiIslandControlWindow();
-                _window.Closed += (_, _) => { _window = null; };
-            }
-            _window.Show();
-            _window.Activate();
-        });
+        MiIslandControlWindow.ShowControlWindow();
     }
 
     public void Stop()
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _window?.RequestClose();
-            _window = null;
-        });
+        MiIslandControlWindow.CloseInstance();
 
         if (_notifyIcon != null)
         {
