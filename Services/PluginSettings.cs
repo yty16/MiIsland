@@ -39,6 +39,9 @@ public class PluginSettings
 
     private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
 
+    /// <summary>设置文件绝对路径（供外部 FileSystemWatcher 监听变更）。</summary>
+    public static string SettingsFilePath => SettingsPath;
+
     public static PluginSettings Load()
     {
         try

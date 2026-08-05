@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
@@ -748,34 +749,36 @@ public partial class SettingsControl : SettingsPageBase
         }
     };
 
-    /// <summary>选择自定义设备图标：弹文件对话框，存到设置（按 did）。</summary>
+    /// <summary>选择自定义设备图标：用 Avalonia StorageProvider 文件选择器，存到设置（按 did）。</summary>
     private async Task PickCustomIconAsync(MiCloudDevice device)
     {
         try
         {
-            var dialog = new OpenFileDialog
-            {
-                Title = $"为「{device.Name}」选择图标",
-                AllowMultiple = false,
-                Filters =
-                {
-                    new FileDialogFilter
-                    {
-                        Name = "图片",
-                        Extensions = { "png", "jpg", "jpeg", "bmp", "webp", "gif" }
-                    }
-                }
-            };
-            var top = TopLevel.GetTopLevel(this) as Window;
+            var top = TopLevel.GetTopLevel(this);
             if (top == null)
             {
                 NotifyHint("无法打开文件选择框（未找到父窗口）", "#F44336");
                 return;
             }
-            var files = await dialog.ShowAsync(top);
-            if (files == null || files.Length == 0) return;
 
-            var path = files[0];
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = $"为「{device.Name}」选择图标",
+                AllowMultiple = false,
+                FileTypeFilter = new System.Collections.Generic.List<FilePickerFileType>
+                {
+                    new FilePickerFileType("图片")
+                    {
+                        Patterns = new System.Collections.Generic.List<string>
+                        {
+                            "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp", "*.gif"
+                        }
+                    }
+                }
+            });
+            if (files == null || files.Count == 0) return;
+
+            var path = files[0].Path.LocalPath;
             if (!File.Exists(path)) return;
 
             _settings.SetDeviceIcon(device.Did, path);

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Timers;
 using Avalonia;
 using Avalonia.Controls;
@@ -24,13 +25,14 @@ namespace MiIsland.Views;
 public class MiHomeComponent : ComponentBase
 {
     private readonly MiCloudService _cloudService = MiCloudService.Instance;
-    private readonly PluginSettings _settings;
+    private PluginSettings _settings;
     private readonly ObservableCollection<MiDeviceStatus> _deviceStatuses = new();
     private List<MiCloudDevice>? _cloudDevices;
     private Timer? _refreshTimer;
     private Timer? _brightnessTimer;
     private (string Did, int Value)? _pendingBrightness;
     private CancellationTokenSource? _refreshCts;
+    private FileSystemWatcher? _settingsWatcher;
 
     // UI控件
     private Grid? _rootGrid;
@@ -53,12 +55,10 @@ public class MiHomeComponent : ComponentBase
         base.OnInitialized();
         BuildUI();
 
-        if (_settings.RefreshIntervalSeconds > 0)
-        {
-            _refreshTimer = new Timer(_settings.RefreshIntervalSeconds * 1000);
-            _refreshTimer.Elapsed += OnRefreshTimerElapsed;
-            _refreshTimer.AutoReset = true;
-        }
+        // 根据设置初始化自动刷新定时器（间隔改动后无需重启即生效）
+        ApplyRefreshInterval();
+        // 监听设置文件变更：刷新间隔 / 设备启用状态改动后自动套用
+        SetupSettingsWatcher();
 
         _ = AutoLoginAndRefreshAsync();
     }
@@ -186,6 +186,52 @@ public class MiHomeComponent : ComponentBase
         }
     }
 
+    /// <summary>按当前设置套用自动刷新定时器：间隔=0 停止；>0 动态更新间隔并启动（无需重启）。</summary>
+    private void ApplyRefreshInterval()
+    {
+        _refreshTimer ??= new Timer { AutoReset = true };
+        _refreshTimer.Elapsed -= OnRefreshTimerElapsed;
+        _refreshTimer.Elapsed += OnRefreshTimerElapsed;
+
+        var sec = _settings.RefreshIntervalSeconds;
+        if (sec <= 0)
+        {
+            _refreshTimer.Stop();
+            return;
+        }
+        _refreshTimer.Interval = Math.Max(1, sec) * 1000;
+        if (_cloudService.IsLoggedIn)
+            _refreshTimer.Start();
+    }
+
+    /// <summary>监听 settings.json 变更，间隔 / 设备启用状态改动后即时套用。</summary>
+    private void SetupSettingsWatcher()
+    {
+        try
+        {
+            _settingsWatcher = new FileSystemWatcher(PluginSettings.SettingsFilePath)
+            {
+                NotifyFilter = NotifyFilters.LastWrite,
+                EnableRaisingEvents = true
+            };
+            _settingsWatcher.Changed += (_, _) => OnSettingsFileChanged();
+        }
+        catch
+        {
+            // 不支持文件监听时忽略，间隔改动仍需重启生效（不影响其他功能）
+        }
+    }
+
+    private void OnSettingsFileChanged()
+    {
+        // 文件可能被连续写入多次，统一回到 UI 线程去抖处理
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { _settings = PluginSettings.Load(); } catch { /* 读取失败保留旧设置 */ }
+            ApplyRefreshInterval();
+        });
+    }
+
     // === 设备刷新 ===
 
     private async void OnRefreshTimerElapsed(object? sender, ElapsedEventArgs e)
@@ -269,6 +315,7 @@ public class MiHomeComponent : ComponentBase
             if (_cloudDevices != null)
             {
                 var enabledCount = 0;
+                var failCount = 0;
                 var iconPairs = new System.Collections.Generic.List<(MiDeviceStatus, MiCloudDevice)>();
                 foreach (var device in _cloudDevices)
                 {
@@ -278,7 +325,7 @@ public class MiHomeComponent : ComponentBase
                     enabledCount++;
 
                     var status = await _cloudService.GetDeviceStatusAsync(device);
-                    if (status == null) continue;
+                    if (status == null) { failCount++; continue; }
 
                     // 自定义图标即时生效；云端图标稍后并行补齐，避免阻塞状态刷新
                     status.IconPath = _settings.GetDeviceIcon(device.Did);
@@ -310,10 +357,23 @@ public class MiHomeComponent : ComponentBase
                         }
                     });
                 }
+                else if (failCount > 0 && enabledCount == failCount)
+                {
+                    // 全部启用设备刷新失败：把云端真实错误透出到组件状态栏
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (_statusText != null)
+                        {
+                            _statusText.Text = $"⚠ 设备状态刷新失败：{_cloudService.LastError ?? "未知错误"}";
+                            _statusText.Foreground = Brush.Parse("#F44336");
+                        }
+                    });
+                }
             }
         }
         catch (Exception ex)
         {
+            SetStatusText($"刷新出错：{_cloudService.LastError ?? ex.Message}", "#F44336");
             System.Diagnostics.Debug.WriteLine(
                 $"[MiHome] RefreshAllAsync error: {ex.Message}");
         }
@@ -458,6 +518,7 @@ public class MiHomeComponent : ComponentBase
         _refreshTimer?.Dispose();
         _brightnessTimer?.Stop();
         _brightnessTimer?.Dispose();
+        _settingsWatcher?.Dispose();
         // 注意：_cloudService 是全局共享单例，不能在组件卸载时 Dispose，否则会破坏登录会话。
         MiCloudService.LoginStateChanged -= OnLoginStateChanged;
         this.Unloaded -= OnComponentUnloaded;

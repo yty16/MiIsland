@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Timers;
 using Avalonia;
 using Avalonia.Controls;
@@ -22,13 +23,14 @@ namespace MiIsland.Views;
 public class MiIslandControlWindow : Window
 {
     private readonly MiCloudService _cloudService = MiCloudService.Instance;
-    private readonly PluginSettings _settings;
+    private PluginSettings _settings;
     private readonly ObservableCollection<MiDeviceStatus> _deviceStatuses = new();
     private List<MiCloudDevice>? _cloudDevices;
     private Timer? _refreshTimer;
     private Timer? _brightnessTimer;
     private (string Did, int Value)? _pendingBrightness;
     private CancellationTokenSource? _refreshCts;
+    private FileSystemWatcher? _settingsWatcher;
 
     private ItemsControl _devicesList = null!;
     private TextBlock _statusText = null!;
@@ -72,11 +74,10 @@ public class MiIslandControlWindow : Window
 
         BuildUI();
 
-        if (_settings.RefreshIntervalSeconds > 0)
-        {
-            _refreshTimer = new Timer(_settings.RefreshIntervalSeconds * 1000) { AutoReset = true };
-            _refreshTimer.Elapsed += (_, _) => _ = RefreshAllAsync();
-        }
+        // 根据设置初始化自动刷新定时器（间隔改动后无需重启即生效）
+        ApplyRefreshInterval();
+        // 监听设置文件变更：刷新间隔 / 设备启用状态改动后自动套用
+        SetupSettingsWatcher();
 
         _ = RefreshAllAsync();
     }
@@ -167,6 +168,54 @@ public class MiIslandControlWindow : Window
         }
     }
 
+    /// <summary>按当前设置套用自动刷新定时器：间隔=0 停止；>0 动态更新间隔并启动（无需重启）。</summary>
+    private void ApplyRefreshInterval()
+    {
+        _refreshTimer ??= new Timer { AutoReset = true };
+        _refreshTimer.Elapsed -= OnRefreshTimerElapsed;
+        _refreshTimer.Elapsed += OnRefreshTimerElapsed;
+
+        var sec = _settings.RefreshIntervalSeconds;
+        if (sec <= 0)
+        {
+            _refreshTimer.Stop();
+            return;
+        }
+        _refreshTimer.Interval = Math.Max(1, sec) * 1000;
+        if (_cloudService.IsLoggedIn)
+            _refreshTimer.Start();
+    }
+
+    private void OnRefreshTimerElapsed(object? sender, ElapsedEventArgs e)
+        => _ = RefreshAllAsync();
+
+    /// <summary>监听 settings.json 变更，间隔 / 设备启用状态改动后即时套用。</summary>
+    private void SetupSettingsWatcher()
+    {
+        try
+        {
+            _settingsWatcher = new FileSystemWatcher(PluginSettings.SettingsFilePath)
+            {
+                NotifyFilter = NotifyFilters.LastWrite,
+                EnableRaisingEvents = true
+            };
+            _settingsWatcher.Changed += (_, _) => OnSettingsFileChanged();
+        }
+        catch
+        {
+            // 不支持文件监听时忽略，间隔改动仍需重启生效（不影响其他功能）
+        }
+    }
+
+    private void OnSettingsFileChanged()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { _settings = PluginSettings.Load(); } catch { /* 读取失败保留旧设置 */ }
+            ApplyRefreshInterval();
+        });
+    }
+
     private async Task RefreshAllAsync()
     {
         if (!_cloudService.IsLoggedIn)
@@ -201,6 +250,7 @@ public class MiIslandControlWindow : Window
             }
 
             var enabled = 0;
+            var failCount = 0;
             var iconPairs = new System.Collections.Generic.List<(MiDeviceStatus, MiCloudDevice)>();
             foreach (var device in _cloudDevices)
             {
@@ -210,7 +260,7 @@ public class MiIslandControlWindow : Window
                 enabled++;
 
                 var status = await _cloudService.GetDeviceStatusAsync(device);
-                if (status == null) continue;
+                if (status == null) { failCount++; continue; }
 
                 // 自定义图标即时生效；云端图标稍后并行补齐
                 status.IconPath = _settings.GetDeviceIcon(device.Did);
@@ -228,12 +278,18 @@ public class MiIslandControlWindow : Window
             {
                 SetStatus("暂无启用的设备，请在设置中勾选要显示的设备", "#9E9E9E");
             }
+            else if (failCount > 0 && enabled == failCount)
+            {
+                // 全部启用设备刷新失败：把云端真实错误透出到窗口状态栏
+                SetStatus($"⚠ 设备状态刷新失败：{_cloudService.LastError ?? "未知错误"}", "#F44336");
+            }
 
             await Dispatcher.UIThread.InvokeAsync(() =>
                 _statusText.Text = _statusText.Text + $"　更新于 {DateTime.Now:HH:mm:ss}");
         }
         catch (Exception ex)
         {
+            SetStatus($"刷新出错：{_cloudService.LastError ?? ex.Message}", "#F44336");
             System.Diagnostics.Debug.WriteLine($"[MiIsland] window refresh error: {ex.Message}");
         }
     }
@@ -381,6 +437,7 @@ public class MiIslandControlWindow : Window
         _refreshTimer?.Dispose();
         _brightnessTimer?.Stop();
         _brightnessTimer?.Dispose();
+        _settingsWatcher?.Dispose();
         base.OnClosing(e);
     }
 }

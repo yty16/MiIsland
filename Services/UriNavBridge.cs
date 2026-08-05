@@ -47,28 +47,43 @@ public static class UriNavBridge
     private static void OpenSettings(IUriNavigationService nav)
     {
         // 设置页的导航 Id 即 SettingsPageInfo 上声明的 Guid
-        Dispatcher.UIThread.Post(() =>
-        {
-            try
-            {
-                nav.NavigateWrapped(
-                    new Uri("classisland://app/settings/F2A9C1E3-7B4D-4F8A-9C2E-1D3F5A7B9C0E"), out _);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[MiIsland] 打开设置页失败: {ex.Message}");
-            }
-        });
+        Dispatcher.UIThread.Post(() => RunWithRetry(() =>
+            nav.NavigateWrapped(
+                new Uri("classisland://app/settings/F2A9C1E3-7B4D-4F8A-9C2E-1D3F5A7B9C0E"), out _)));
     }
 
     private static void OpenControl()
     {
-        Dispatcher.UIThread.Post(MiIslandControlWindow.ShowControlWindow);
+        Dispatcher.UIThread.Post(() => RunWithRetry(MiIslandControlWindow.ShowControlWindow));
     }
 
     private static void OpenDevice(UriNavigationEventArgs args)
     {
         var did = args.ChildrenPathPatterns.Count > 0 ? args.ChildrenPathPatterns[0] : "";
-        Dispatcher.UIThread.Post(() => MiIslandDeviceWindow.ShowDeviceWindow(did));
+        Dispatcher.UIThread.Post(() => RunWithRetry(() => MiIslandDeviceWindow.ShowDeviceWindow(did)));
+    }
+
+    /// <summary>在 UI 线程执行打开动作；若宿主尚未就绪（罕见竞态），400ms 后重试一次。</summary>
+    private static void RunWithRetry(Action open)
+    {
+        try
+        {
+            open();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MiIsland] Uri 处理首次失败，400ms 后重试: {ex.Message}");
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                try { open(); }
+                catch (Exception ex2)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MiIsland] Uri 处理重试仍失败: {ex2.Message}");
+                }
+            };
+            timer.Start();
+        }
     }
 }
