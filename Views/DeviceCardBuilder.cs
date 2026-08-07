@@ -96,7 +96,8 @@ public static class DeviceCardBuilder
 
         var statusText = new TextBlock
         {
-            Text = status.Kind == MiDeviceKind.Sensor ? status.SensorText : status.StatusText,
+            Text = status.Kind is MiDeviceKind.Sensor or MiDeviceKind.Camera or MiDeviceKind.Router
+                ? status.SensorText : status.StatusText,
             FontSize = 11,
             Foreground = Brush.Parse("#9E9E9E"),
             Margin = new Thickness(0, 2, 0, 0)
@@ -106,7 +107,12 @@ public static class DeviceCardBuilder
         top.Children.Add(statusText);
 
         // 右侧控件按设备类型渲染
-        if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic)
+        // 电源开关：灯 / 开关 / 插座 / 电视 / 空调 / 扫地机 / 净化器 / 风扇 / 加湿器 / 音箱 / 热水壶 / 取暖器 / 洗衣机 / 冰箱 / 其他
+        if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic
+            or MiDeviceKind.Tv or MiDeviceKind.AirConditioner or MiDeviceKind.Vacuum
+            or MiDeviceKind.AirPurifier or MiDeviceKind.Fan or MiDeviceKind.Humidifier
+            or MiDeviceKind.Speaker or MiDeviceKind.Kettle or MiDeviceKind.Heater
+            or MiDeviceKind.Washer or MiDeviceKind.Fridge)
         {
             var toggleBtn = new Button
             {

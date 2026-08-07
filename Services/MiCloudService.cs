@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -313,35 +314,102 @@ public class MiCloudService : IDisposable
     }
 
     /// <summary>
-    /// 按设备 model 前缀粗分类型, 决定组件展示哪些控件。
-    /// 这是启发式分类 (不拉 miot spec), 覆盖常见品类; 未知型号回退到 Generic (电源开关)。
+    /// 按设备 model 前缀 + 设备中文名粗分类型, 决定组件展示哪些控件 / 占位图标。
+    /// 这是启发式分类 (不拉 miot spec), 优先匹配用户可读的设备名 (用户反馈设备名已写明类型),
+    /// 再辅以 model 前缀; 未知型号回退到 Generic (电源开关)。
+    /// 规则顺序很重要: 传感器 / 窗帘 / 灯 等要先于通用"开关 / 插座"判定。
     /// </summary>
     public static MiDeviceKind ClassifyDevice(MiCloudDevice device)
     {
         var m = device.Model.ToLowerInvariant();
         var n = device.Name.ToLowerInvariant();
 
-        // 传感器 (温湿度等, 一般没有电源属性)
-        if (m.Contains("sensor") || m.Contains("weather") || m.Contains("temp") ||
-            m.Contains("humid") || m.Contains("cgllc.airm") || n.Contains("温湿度") ||
-            n.Contains("传感器"))
-            return MiDeviceKind.Sensor;
+        // (类型, 设备名中文关键词, model 英文关键词) — 优先级从高到低
+        (MiDeviceKind kind, string[] names, string[] models)[] rules =
+        {
+            // 传感器 (只读, 一般无电源)
+            (MiDeviceKind.Sensor,
+                new[] { "温湿", "传感器", "人体", "门窗", "烟雾", "燃气", "水浸", "光照", "环境", "空气质量", "pm2", "毫米波", "动静", "动静贴" },
+                new[] { "sensor", "weather", "temp", "humid", "cgllc.airm", "lumi.sensor", "motion", "magnet", "smoke" }),
+            // 窗帘
+            (MiDeviceKind.Curtain,
+                new[] { "窗帘", "卷帘", "天幕", "百叶" },
+                new[] { "curtain", "window" }),
+            // 灯 (含亮度)
+            (MiDeviceKind.Light,
+                new[] { "灯", "筒灯", "吸顶灯", "台灯", "氛围灯", "灯带", "夜灯", "灯条" },
+                new[] { "light", "yeelink", "bulb", "lamp", "philips", "ceiling", "led", "chuangmi.light" }),
+            // 摄像头 (只读) — 含智能猫眼
+            (MiDeviceKind.Camera,
+                new[] { "摄像头", "摄像机", "监控", "相机", "猫眼" },
+                new[] { "camera", "chuangmi.camera", "videocam", "imilab" }),
+            // 门锁 (只读)
+            (MiDeviceKind.Lock,
+                new[] { "门锁", "智能锁", "指纹锁" },
+                new[] { "lock", "loock", "xiaomi.lock" }),
+            // 路由器 (只读)
+            (MiDeviceKind.Router,
+                new[] { "路由器", "路由", "wifi" },
+                new[] { "router", "miwifi", "redmi.router" }),
+            // 网关 (只读)
+            (MiDeviceKind.Gateway,
+                new[] { "网关" },
+                new[] { "gateway", "lumi.gateway", "lumi.acpartner" }),
+            // 电视
+            (MiDeviceKind.Tv,
+                new[] { "电视", "盒子" },
+                new[] { "tv", "mitv", "xiaomi.tv", "patchwall" }),
+            // 空调
+            (MiDeviceKind.AirConditioner,
+                new[] { "空调", "空气调节" },
+                new[] { "aircondition", "air.condition", "ac." }),
+            // 扫地 / 拖地机器人
+            (MiDeviceKind.Vacuum,
+                new[] { "扫地", "拖地", "扫拖", "机器人" },
+                new[] { "vacuum", "roborock", "rockrobo", "cleaner", "viomi.vacuum" }),
+            // 空气净化器
+            (MiDeviceKind.AirPurifier,
+                new[] { "净化器", "空气净化", "除醛", "新风" },
+                new[] { "airpurifier", "air.purifier", "zhimi.air", "zhimi.airpurifier" }),
+            // 风扇
+            (MiDeviceKind.Fan,
+                new[] { "风扇", "循环扇", "电扇", "空气循环", "扇" },
+                new[] { "fan", "zhimi.fan", "zhimi.fans" }),
+            // 加湿器
+            (MiDeviceKind.Humidifier,
+                new[] { "加湿器" },
+                new[] { "humidifier", "zhimi.humidifier" }),
+            // 音箱 / 小爱
+            (MiDeviceKind.Speaker,
+                new[] { "音箱", "小爱", "音响", "扬声器", "蓝牙音箱" },
+                new[] { "speaker", "aispeaker", "wifispeaker", "xiaoai", "mdz" }),
+            // 热水壶
+            (MiDeviceKind.Kettle,
+                new[] { "热水壶", "烧水壶", "电水壶", "水壶" },
+                new[] { "kettle" }),
+            // 取暖器
+            (MiDeviceKind.Heater,
+                new[] { "取暖器", "电暖器", "暖风机", "取暖", "浴霸" },
+                new[] { "heater", "zhimi.heater" }),
+            // 洗衣机
+            (MiDeviceKind.Washer,
+                new[] { "洗衣机", "洗烘", "洗烘一体" },
+                new[] { "washer", "wash" }),
+            // 冰箱
+            (MiDeviceKind.Fridge,
+                new[] { "冰箱", "冷柜", "冰柜" },
+                new[] { "fridge", "refriger", "viomi.fridge" }),
+            // 开关 / 插座 (电源)
+            (MiDeviceKind.Switch,
+                new[] { "插座", "开关", "插线板", "排插", "转换器", "墙插" },
+                new[] { "switch", "plug", "socket", "ctrl", "cgllc", "dingwei", "cuco", "qmi", "chuangmi.plug", "zimi" }),
+        };
 
-        // 窗帘
-        if (m.Contains("curtain") || n.Contains("窗帘"))
-            return MiDeviceKind.Curtain;
-
-        // 灯 (含亮度)
-        if (m.Contains("light") || m.Contains("yeelink") || m.Contains("bulb") ||
-            m.Contains("lamp") || m.Contains("philips") || m.Contains("ceiling") ||
-            n.Contains("灯") || n.Contains("筒灯") || n.Contains("吸顶灯"))
-            return MiDeviceKind.Light;
-
-        // 开关 / 插座
-        if (m.Contains("switch") || m.Contains("plug") || m.Contains("socket") ||
-            m.Contains("ctrl") || m.Contains("cgllc") || m.Contains("dingwei") ||
-            n.Contains("插座") || n.Contains("开关"))
-            return MiDeviceKind.Switch;
+        foreach (var (kind, names, models) in rules)
+        {
+            if (names.Any(k => n.Contains(k)) || models.Any(k => m.Contains(k)))
+                return kind;
+        }
 
         return MiDeviceKind.Generic;
     }
