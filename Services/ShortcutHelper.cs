@@ -141,7 +141,8 @@ public static class ShortcutHelper
 
     private static string? _cachedIco;
 
-    /// <summary>把插件 icon.png 转成 48x48 的 .ico 缓存到插件目录，供 .lnk 使用；失败返回 null。</summary>
+    /// <summary>把插件 icon.png 转成 48x48 的 .ico 缓存到插件目录，供 .lnk 使用；失败返回 null。
+    /// 必须用 PNG-in-ICO 格式写文件，否则 Icon.Save() 会丢 alpha，桌面渲染出来就是黑色背景。</summary>
     private static string? GetShortcutIcon()
     {
         try
@@ -151,20 +152,45 @@ public static class ShortcutHelper
             if (!File.Exists(png)) return null;
 
             var ico = Path.Combine(PluginDir, "shortcut.ico");
-            if (!File.Exists(ico))
+            // 始终重新生成，避免旧版（丢 alpha）的 .ico 缓存残留
+            if (File.Exists(ico))
             {
-                using var src = new Bitmap(png);
-                using var bmp = new Bitmap(48, 48);
-                using (var g = Graphics.FromImage(bmp))
-                {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(src, 0, 0, 48, 48);
-                }
-
-                using var icon = Icon.FromHandle(bmp.GetHicon());
-                using var fs = File.Create(ico);
-                icon.Save(fs);
+                try { File.Delete(ico); } catch { /* 占用中，留给下次 */ }
             }
+
+            // 显式 32bpp ARGB，保留 alpha 通道
+            using var src = new Bitmap(png);
+            using var bmp = new Bitmap(48, 48, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(System.Drawing.Color.Transparent);
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                g.DrawImage(src, 0, 0, 48, 48);
+            }
+
+            // 把 .ico 当作"PNG 容器"写：ICONDIR + ICONDIRENTRY + PNG 字节。
+            // Windows Vista+ 原生支持 PNG-in-ICO，alpha 完整保留。
+            using var pngMs = new MemoryStream();
+            bmp.Save(pngMs, System.Drawing.Imaging.ImageFormat.Png);
+            var pngBytes = pngMs.ToArray();
+
+            using var fs = File.Create(ico);
+            // ICONDIR (6 bytes)
+            WriteUInt16LE(fs, 0);                        // reserved
+            WriteUInt16LE(fs, 1);                        // type = icon
+            WriteUInt16LE(fs, 1);                        // count = 1
+            // ICONDIRENTRY (16 bytes)
+            fs.WriteByte(48);                            // width
+            fs.WriteByte(48);                            // height
+            fs.WriteByte(0);                             // color count (0 = no palette)
+            fs.WriteByte(0);                             // reserved
+            WriteUInt16LE(fs, 1);                        // planes
+            WriteUInt16LE(fs, 32);                       // bit count
+            WriteUInt32LE(fs, (uint)pngBytes.Length);    // image size
+            WriteUInt32LE(fs, 22);                       // image data offset (6+16)
+            fs.Write(pngBytes, 0, pngBytes.Length);
 
             _cachedIco = ico;
             return ico;
@@ -173,6 +199,20 @@ public static class ShortcutHelper
         {
             return null;
         }
+    }
+
+    private static void WriteUInt16LE(Stream s, ushort v)
+    {
+        s.WriteByte((byte)(v & 0xFF));
+        s.WriteByte((byte)((v >> 8) & 0xFF));
+    }
+
+    private static void WriteUInt32LE(Stream s, uint v)
+    {
+        s.WriteByte((byte)(v & 0xFF));
+        s.WriteByte((byte)((v >> 8) & 0xFF));
+        s.WriteByte((byte)((v >> 16) & 0xFF));
+        s.WriteByte((byte)((v >> 24) & 0xFF));
     }
 
     private static void CreateShortcut(string lnkPath, string targetPath, string arguments,
