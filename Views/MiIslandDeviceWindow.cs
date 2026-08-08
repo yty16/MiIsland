@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Timers;
 using Avalonia;
@@ -336,6 +337,14 @@ public class MiIslandDeviceWindow : Window
     {
         _cardHost.Children.Clear();
 
+        // 摄像头：实时画面 / 对讲走小米私有 P2P 协议，云 RPC 无法直接取流。
+        // 这里提供「在米家查看实时画面」深链占位（优先唤起桌面米家 App，失败退回网页版），
+        // 下方仍渲染可云端控制的云台动作 / 状态等。
+        if (_device?.Kind == MiDeviceKind.Camera)
+        {
+            _cardHost.Children.Add(BuildCameraLiveSection());
+        }
+
         if (_controlItems.Count > 0)
         {
             // 按分组渲染
@@ -541,6 +550,54 @@ public class MiIslandDeviceWindow : Window
         }
 
         return row;
+    }
+
+    /// <summary>
+    /// 摄像头专属区：实时画面 / 对讲走小米私有 P2P 协议，云 RPC 无法直接取流，
+    /// 这里仅提供「在米家查看实时画面」深链占位（优先唤起桌面米家 App，失败退回网页版）。
+    /// 真正的视频流需日后接入 go2rtc 等 P2P 方案。
+    /// </summary>
+    private Control BuildCameraLiveSection()
+    {
+        var panel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 8) };
+
+        var hint = new TextBlock
+        {
+            Text = "实时画面与对讲需在米家 App 中查看（小米摄像头走私有 P2P 协议，插件暂无法直接取流）。",
+            FontSize = 11,
+            Foreground = Brush.Parse("#9E9E9E"),
+            TextWrapping = TextWrapping.Wrap
+        };
+        panel.Children.Add(hint);
+
+        var liveBtn = new Button
+        {
+            Content = "在米家查看实时画面",
+            Padding = new Thickness(14, 8),
+            Background = Brush.Parse("#FF5722"),
+            Foreground = Brush.Parse("#FFFFFF"),
+            CornerRadius = new CornerRadius(6),
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        liveBtn.Click += (_, _) => OpenMiHomeCamera();
+        panel.Children.Add(liveBtn);
+
+        return panel;
+    }
+
+    /// <summary>
+    /// 优先用 mihome:// 协议唤起桌面端米家 App；若系统未注册该协议处理器则退回网页版米家。
+    /// </summary>
+    private void OpenMiHomeCamera()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("mihome://home") { UseShellExecute = true });
+        }
+        catch
+        {
+            Process.Start(new ProcessStartInfo("https://home.mi.com/") { UseShellExecute = true });
+        }
     }
 
     // === 应用控制（操作后回查真实状态）===
