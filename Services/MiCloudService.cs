@@ -313,6 +313,80 @@ public class MiCloudService : IDisposable
         return result.Value.Clone();
     }
 
+    // === miot-spec 风格 RPC（标准 siid/piid/aiid 控制，按设备真实能力驱动 UI）===
+
+    /// <summary>
+    /// 按 siid/piid 批量读取设备属性（miot get_properties）。
+    /// 返回 (siid,piid) → 值的字典；失败返回空字典。
+    /// </summary>
+    public async Task<Dictionary<(int Siid, int Piid), object?>> GetMiotPropertiesAsync(
+        string did, List<(int Siid, int Piid)> props)
+    {
+        var dict = new Dictionary<(int, int), object?>();
+        if (!EnsureSession(out _)) return dict;
+        if (props.Count == 0) return dict;
+
+        var payload = props.Select(p => new { did, siid = p.Siid, piid = p.Piid }).ToArray();
+        var result = await CallRpcAsync(did, "get_properties", payload);
+        if (result == null) return dict;
+
+        if (result.Value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in result.Value.EnumerateArray())
+            {
+                if (el.TryGetProperty("siid", out var s) && el.TryGetProperty("piid", out var p) &&
+                    el.TryGetProperty("value", out var v))
+                {
+                    dict[(s.GetInt32(), p.GetInt32())] = JsonElementToObject(v);
+                }
+            }
+        }
+        return dict;
+    }
+
+    /// <summary>写单个 miot 属性（set_properties）。返回是否成功。</summary>
+    public async Task<bool> SetMiotPropertyAsync(string did, int siid, int piid, object value)
+    {
+        var payload = new[] { new { did, siid, piid, value } };
+        var result = await CallRpcAsync(did, "set_properties", payload);
+        if (result == null) return false;
+        // 部分设备返回 [{siid,piid,code}]，code==0 才算成功
+        if (result.Value.ValueKind == JsonValueKind.Array && result.Value.GetArrayLength() > 0)
+        {
+            var first = result.Value[0];
+            if (first.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.Number)
+                return code.GetInt32() == 0;
+        }
+        return true;
+    }
+
+    /// <summary>调用 miot 动作（action）。inParams 为动作入参（如文字播报的文本）。返回是否成功。</summary>
+    public async Task<bool> CallMiotActionAsync(string did, int siid, int aiid, object[]? inParams = null)
+    {
+        var payload = new[] { new { did, siid, aiid, @in = inParams ?? Array.Empty<object>() } };
+        var result = await CallRpcAsync(did, "action", payload);
+        if (result == null) return false;
+        if (result.Value.ValueKind == JsonValueKind.Array && result.Value.GetArrayLength() > 0)
+        {
+            var first = result.Value[0];
+            if (first.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.Number)
+                return code.GetInt32() == 0;
+        }
+        return true;
+    }
+
+    /// <summary>拉取设备 miot-spec（委托给 MiotSpecService，含缓存与失败安全）。</summary>
+    public Task<MiotSpec?> GetSpecAsync(string model) => MiotSpecService.GetSpecAsync(model);
+
+    private static object? JsonElementToObject(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Number => v.TryGetInt32(out var i) ? i : v.GetDouble(),
+        JsonValueKind.String => v.GetString(),
+        _ => v.GetRawText()
+    };
+
     /// <summary>
     /// 按设备 model 前缀 + 设备中文名粗分类型, 决定组件展示哪些控件 / 占位图标。
     /// 这是启发式分类 (不拉 miot spec), 优先匹配用户可读的设备名 (用户反馈设备名已写明类型),

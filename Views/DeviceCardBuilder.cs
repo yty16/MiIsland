@@ -19,7 +19,8 @@ public static class DeviceCardBuilder
         MiDeviceStatus status,
         Action<string>? onToggle = null,
         Action<string, string>? onCurtain = null,
-        Action<string, double>? onBrightness = null)
+        Action<string, double>? onBrightness = null,
+        Action<string>? onOpenDetail = null)
     {
         var card = new Border
         {
@@ -107,13 +108,9 @@ public static class DeviceCardBuilder
         top.Children.Add(statusText);
 
         // 右侧控件按设备类型渲染
-        // 电源开关：灯 / 开关 / 插座 / 电视 / 空调 / 扫地机 / 净化器 / 风扇 / 加湿器 / 音箱 / 热水壶 / 取暖器 / 洗衣机 / 冰箱 / 其他
-        if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic
-            or MiDeviceKind.Tv or MiDeviceKind.AirConditioner or MiDeviceKind.Vacuum
-            or MiDeviceKind.AirPurifier or MiDeviceKind.Fan or MiDeviceKind.Humidifier
-            or MiDeviceKind.Speaker or MiDeviceKind.Kettle or MiDeviceKind.Heater
-            or MiDeviceKind.Washer or MiDeviceKind.Fridge)
+        if (status.Kind is MiDeviceKind.Light or MiDeviceKind.Switch or MiDeviceKind.Generic)
         {
+            // 灯 / 开关 / 插座 / 通用：直接内联电源开关（这些设备确实以「开关」为主要控制）
             var toggleBtn = new Button
             {
                 Content = status.PowerButtonText,
@@ -159,7 +156,28 @@ public static class DeviceCardBuilder
             Grid.SetColumn(panel, 2);
             top.Children.Add(panel);
         }
-        // Sensor: 只读展示, 无控件
+        else if (onOpenDetail != null)
+        {
+            // 其它设备（电视 / 空调 / 扫地机 / 净化器 / 风扇 / 加湿器 / 音箱 / 热水壶 / 取暖器 /
+            // 洗衣机 / 冰箱 / 传感器 / 摄像头 / 路由器 / 门锁 / 网关）：不再只给一个「开关」，
+            // 而是提供「控制」入口，打开按设备类型设计的详细控制面板（开关 / 模式 / 音量 / 动作等）。
+            var ctrlBtn = new Button
+            {
+                Content = "控制",
+                FontSize = 12,
+                Width = 56, Height = 30,
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = Brush.Parse("#2196F3"),
+                Foreground = Brush.Parse("#FFFFFF"),
+                CornerRadius = new CornerRadius(4),
+                Tag = status.Did
+            };
+            ctrlBtn.Click += (_, _) => onOpenDetail(status.Did);
+            Grid.SetRowSpan(ctrlBtn, 2);
+            Grid.SetColumn(ctrlBtn, 2);
+            top.Children.Add(ctrlBtn);
+        }
+        // 无 onOpenDetail 且非上述类型：只读展示
 
         root.Children.Add(top);
 

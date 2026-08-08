@@ -152,7 +152,8 @@ public class MiIslandControlWindow : Window
         Action<string> onToggle = did => { _ = ToggleDeviceAsync(did); };
         Action<string, string> onCurtain = (did, action) => { _ = CurtainDeviceAsync(did, action); };
         Action<string, double> onBrightness = (did, v) => ScheduleBrightnessSet(did, v);
-        return DeviceCardBuilder.BuildCard(status, onToggle, onCurtain, onBrightness);
+        Action<string> onOpenDetail = did => MiIslandDeviceWindow.ShowDeviceWindow(did);
+        return DeviceCardBuilder.BuildCard(status, onToggle, onCurtain, onBrightness, onOpenDetail);
     }
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
