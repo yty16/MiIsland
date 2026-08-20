@@ -1,0 +1,100 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>MiIsland</AssemblyName>
+        <RootNamespace>MiIsland</RootNamespace>
+        <!-- 开启后，构建自动把输出打成 cipx/MiIsland.cipx 并生成 cipx/checksums.md（与 CI-PeekShield 部署流程一致） -->
+        <CreateCipx>true</CreateCipx>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ClassIslandPluginSdkVersion>2.0.3.2</ClassIslandPluginSdkVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ClassIsland.PluginSdk" Version="$(ClassIslandPluginSdkVersion)">
+            <ExcludeAssets>runtime; native</ExcludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 托盘图标 NotifyIcon 需要 WinForms (属于 WindowsDesktop 框架) -->
+        <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="manifest.yml">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="README.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="icon.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="MiIsland.runtimeconfig.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <!-- ==================== 开发期自动部署 ====================
+         每次构建后把插件输出同步到本机 ClassIsland 插件目录，免去手动重装 .cipx。
+         与 CI-PeekShield 部署流程一致。
+
+         · 覆盖插件根目录： dotnet build -p:ClassIslandPluginsDir=X:\path\to\data\Plugins
+         · 临时关闭部署：   dotnet build -p:DeployToClassIsland=false
+         · 目录不存在时静默跳过，不影响他人 / CI 构建。
+
+         安全约定：只覆盖代码产物，绝不删除用户数据
+         （settings.json 设置、miot_specs/ 缓存、logs/ 日志均原样保留）。
+    -->
+    <PropertyGroup>
+        <ClassIslandPluginId>MiIsland</ClassIslandPluginId>
+        <ClassIslandPluginsDir Condition="'$(ClassIslandPluginsDir)' == ''">D:\software\ClassIsland_app_windows_x64_full_singleFile\data\Plugins</ClassIslandPluginsDir>
+        <ClassIslandDeployDir>$(ClassIslandPluginsDir)\$(ClassIslandPluginId)</ClassIslandDeployDir>
+        <ClassIslandProcessName Condition="'$(ClassIslandProcessName)' == ''">ClassIsland.Desktop.exe</ClassIslandProcessName>
+        <DeployToClassIsland Condition="'$(DeployToClassIsland)' == ''">true</DeployToClassIsland>
+    </PropertyGroup>
+
+    <Target Name="DeployToClassIslandPlugins" AfterTargets="Build"
+            Condition="'$(DeployToClassIsland)' == 'true' And Exists('$(ClassIslandPluginsDir)')">
+
+        <!-- ClassIsland 运行中会锁定插件 dll，此时部署必然失败且新版也不会生效，故先检测并跳过 -->
+        <Exec Command="tasklist /FI &quot;IMAGENAME eq $(ClassIslandProcessName)&quot; /NH"
+              ConsoleToMSBuild="true" IgnoreExitCode="true"
+              StandardOutputImportance="low" StandardErrorImportance="low">
+            <Output TaskParameter="ConsoleOutput" PropertyName="_CiProcList" />
+        </Exec>
+        <PropertyGroup>
+            <_CiRunning>false</_CiRunning>
+            <_CiRunning Condition="$(_CiProcList.Contains('$(ClassIslandProcessName)'))">true</_CiRunning>
+        </PropertyGroup>
+
+        <Message Importance="high" Condition="'$(_CiRunning)' == 'true'"
+                 Text="[部署跳过] ClassIsland 正在运行，插件 dll 被占用。请退出 ClassIsland 后重新构建，即可自动部署到：$(ClassIslandDeployDir)" />
+
+        <!-- 仅清理代码产物，避免旧依赖残留导致加载冲突 -->
+        <ItemGroup Condition="'$(_CiRunning)' != 'true'">
+            <_CiStale Include="$(ClassIslandDeployDir)\*.dll" />
+            <_CiStale Include="$(ClassIslandDeployDir)\*.pdb" />
+            <_CiStale Include="$(ClassIslandDeployDir)\*.deps.json" />
+            <_CiStale Include="$(ClassIslandDeployDir)\*.runtimeconfig.json" />
+            <_CiStale Include="$(ClassIslandDeployDir)\runtimes\**\*.*" />
+            <!-- 待部署文件：构建输出全部内容，.cipx 本体无需进插件目录 -->
+            <_CiDeploy Include="$(OutDir)**\*.*" Exclude="$(OutDir)**\*.cipx;$(OutDir)runtimes\win-x86\**\*.*" />
+        </ItemGroup>
+
+        <Delete Files="@(_CiStale)" Condition="'$(_CiRunning)' != 'true'" ContinueOnError="true" />
+        <MakeDir Directories="$(ClassIslandDeployDir)" Condition="'$(_CiRunning)' != 'true'" />
+        <Copy SourceFiles="@(_CiDeploy)"
+              DestinationFiles="@(_CiDeploy->'$(ClassIslandDeployDir)\%(RecursiveDir)%(Filename)%(Extension)')"
+              Condition="'$(_CiRunning)' != 'true'" ContinueOnError="true" />
+
+        <Message Importance="high" Condition="'$(_CiRunning)' != 'true'"
+                 Text="[已部署] @(_CiDeploy->Count()) 个文件 -> $(ClassIslandDeployDir)（用户数据已保留）" />
+    </Target>
+
+</Project>
