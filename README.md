@@ -1,5 +1,11 @@
 # MiIsland
 
+![Release](https://img.shields.io/github/v/release/yty16/MiIsland?style=flat-square)
+![Downloads](https://img.shields.io/github/downloads/yty16/MiIsland/total?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-ClassIsland%20Plugin-blue?style=flat-square)
+![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square)
+![License](https://img.shields.io/badge/license-Non--Commercial-orange?style=flat-square)
+
 **ClassIsland** 米家设备控制插件（非官方）
 
 > ⚠️ **合规与免责声明（必读）**
