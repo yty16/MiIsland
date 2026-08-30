@@ -4,7 +4,7 @@
 ![Downloads](https://img.shields.io/github/downloads/yty16/MiIsland/total?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-ClassIsland%20Plugin-blue?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square)
-![License](https://img.shields.io/badge/license-Non--Commercial-orange?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)
 
 **ClassIsland** 米家设备控制插件（非官方）
 
@@ -88,12 +88,12 @@
 
 ## 许可证
 
-本项目以 **MiIsland 非商业许可协议**（见 `LICENSE` 文件）提供：
+本项目以 **GNU 通用公共许可证 v3.0（GPL-3.0）** 提供，详见 `LICENSE` 文件。
 
-- ✅ **允许**：个人学习、研究、自用，**以及无偿、非商业的原样分发**（分发时须附带 LICENSE 与免责声明）；
-- ❌ **禁止**：任何商业、盈利、售卖、收费，或作为商业产品的一部分提供。
+- ✅ **允许**：个人学习、研究、自用，以及根据 GPL-3.0 条款进行的复制、修改、再分发（含商业用途）；
+- ⚠️ 任何再分发（含修改后的版本）**必须**以 GPL-3.0 开源，并附带完整许可证与源码。
 
-该许可证**不授予**你使用小米任何接口、商标或数据的权利，亦**不豁免**你对第三方服务条款的遵守义务。使用本项目不意味着你获得了小米任何接口的使用授权。
+使用小米相关接口、商标或数据的权利不受本许可证授予，亦不豁免你对第三方服务条款的遵守义务。使用本项目不意味着你获得了小米任何接口的使用授权。详见 `DISCLAIMER.md`。
 
 ## 仓库
 
